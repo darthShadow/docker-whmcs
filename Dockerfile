@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.4
 FROM lscr.io/linuxserver/baseimage-ubuntu:focal
 
+ARG BUILD_DATE
+LABEL build_date="Build-date:- ${BUILD_DATE}"
 LABEL maintainer="darthShadow"
 
 ARG TARGETARCH
