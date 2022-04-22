@@ -79,12 +79,8 @@ jobs:
             ${{ steps.docker_meta.outputs.bake-file }}
           set: |
             image.args.BUILD_DATE=${{ steps.gen_date.outputs.build_date }}
-            image.args.PHP_RELEASE=7.4
-          targets: all
+          targets: publish
           push: true
-
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
 
       - name: Cleanup
         id: cleanup

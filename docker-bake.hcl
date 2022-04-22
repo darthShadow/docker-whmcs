@@ -1,11 +1,30 @@
-target "docker-metadata-action" {}
+# ---- groups ----
 
 group "default" {
   targets = ["image-local"]
 }
 
+group "publish" {
+  targets = ["publish"]
+}
+
+# ---- variables ----
+
+variable "PHP_RELEASE" {
+    default = "7.4"
+}
+
+# ---- targets ----
+
+target "docker-metadata-action" {}
+
 target "image" {
   inherits = ["docker-metadata-action"]
+  dockerfile = "Dockerfile"
+  context = "."
+  args = {
+    PHP_RELEASE = PHP_RELEASE
+  }
 }
 
 target "image-local" {
@@ -13,41 +32,10 @@ target "image-local" {
   output = ["type=docker"]
 }
 
-target "amd64" {
-  inherits = ["image"]
-  dockerfile = "Dockerfile"
-  platforms = [
-    "linux/amd64"
-  ]
-}
-
-target "arm64v8" {
-  inherits = ["image"]
-  dockerfile = "Dockerfile"
-  platforms = [
-    "linux/arm64"
-  ]
-}
-
-target "64" {
+target "publish" {
   inherits = ["image"]
   platforms = [
     "linux/amd64",
     "linux/arm64"
-  ]
-}
-
-target "arm" {
-  inherits = ["image"]
-  platforms = [
-    "linux/arm64",
-  ]
-}
-
-target "all" {
-  inherits = ["image"]
-  platforms = [
-    "linux/amd64",
-    "linux/arm64",
   ]
 }
