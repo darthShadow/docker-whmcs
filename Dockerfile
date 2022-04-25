@@ -15,6 +15,8 @@ ENV PHP_VERSION=${PHP_RELEASE}
 
 ENV TZ="UTC" PGID="1000" PUID="1000"
 
+ENV AUTH_USER="whmcs" AUTH_PASS="whmcs@nginx:2022"
+
 ENV DEBIAN_FRONTEND="noninteractive"
 
 # Install nginx and PHP
@@ -38,10 +40,16 @@ RUN echo "**** Install Dependencies ****" && \
         zip && \
     echo "**** Add PPA: ondrej/php ****" && \
     add-apt-repository -y "ppa:ondrej/php" && \
+    echo "**** Add PPA: ondrej/nginx-mainline ****" && \
+    add-apt-repository -y "ppa:ondrej/nginx-mainline" && \
     echo "**** Update Repositories ****" && \
     apt-get -y update && \
     echo "**** Upgrade Packages ****" && \
     apt-get -y upgrade && \
+    echo "**** Install Nginx Packages ****" && \
+    apt-get -y install --no-install-recommends \
+        apache2-utils \
+        nginx-extras && \
     echo "**** Install PHP Packages ****" && \
     apt-get -y install --no-install-recommends \
         php-pear \
@@ -80,6 +88,19 @@ RUN echo "**** Install Dependencies ****" && \
 RUN update-alternatives --set php /usr/bin/php${PHP_VERSION} && \
     update-alternatives --install /usr/sbin/php-fpm php-fpm /usr/sbin/php-fpm${PHP_VERSION} 60
 
+# Setup php
+RUN echo "**** Setting Up php & php-fpm ****" && \
+    if [ ! -d /var/lib/php/sessions ]; then \
+        mkdir -p /var/lib/php/sessions; \
+        chown -R abc:abc /var/lib/php; \
+    fi && \
+    mkdir -p \
+        /etc/php/${PHP_VERSION}/fpm/conf.d/ \
+        /etc/php/${PHP_VERSION}/fpm/pool.d/ && \
+    if [ -f /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf ]; then \
+        mv -vf /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf /etc/php/${PHP_VERSION}/fpm/pool.d/00-www.conf; \
+    fi
+
 # Configure production php.ini for CLI
 # * Max execution time = 1800 seconds
 # * Set the timezone = ${TZ}
@@ -96,7 +117,7 @@ RUN case ${TARGETARCH} in \
     echo "**** Installing SourceGuardian for PHP: Architecture: ${SOURCEGUARDIAN_ARCH} ****" && \
     mkdir /tmp/sourceguardian && cd /tmp/sourceguardian && \
     curl --user-agent "Mozilla" -o sourceguardian.zip https://www.sourceguardian.com/loaders/download/loaders.linux-${SOURCEGUARDIAN_ARCH}.zip && \
-    unzip -q sourceguardian.zip && mkdir -p /usr/lib/php/sourceguardian && cp ixed.${PHP_VERSION}.lin /usr/lib/php/sourceguardian/. && \
+    unzip -q sourceguardian.zip && mkdir -p /usr/lib/php/sourceguardian && cp -vf ixed.${PHP_VERSION}.lin /usr/lib/php/sourceguardian/ && \
     echo "zend_extension=/usr/lib/php/sourceguardian/ixed.${PHP_VERSION}.lin" > /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini && \
     ln -sf /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-sourceguardian.ini && \
     ln -sf /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-sourceguardian.ini && \
@@ -110,11 +131,19 @@ RUN case ${TARGETARCH} in \
     echo "**** Installing ionCube for PHP: Architecture: ${IONCUBE_ARCH} ****" && \
     mkdir /tmp/ioncube && cd /tmp/ioncube && \
     curl --user-agent "Mozilla" -o ioncube.zip http://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_${IONCUBE_ARCH}.zip && \
-    unzip -q ioncube.zip && mkdir -p /usr/lib/php/ioncube && cp ioncube/ioncube_loader_lin_${PHP_VERSION}.so /usr/lib/php/ioncube/. && \
+    unzip -q ioncube.zip && mkdir -p /usr/lib/php/ioncube && cp -vf ioncube/ioncube_loader_lin_${PHP_VERSION}.so /usr/lib/php/ioncube/ && \
     echo "zend_extension = /usr/lib/php/ioncube/ioncube_loader_lin_${PHP_VERSION}.so" > /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini && \
     ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-ioncube.ini && \
     ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-ioncube.ini && \
     rm -rf /tmp/ioncube
+
+# Setup nginx
+RUN echo "**** Setting Up nginx ****" && \
+    mkdir -p /var/www && \
+    chown -R abc:abc /var/www && \
+    ln -svf /dev/stdout /var/log/nginx/access.log && \
+    ln -svf /dev/stderr /var/log/nginx/error.log && \
+    rm -vf /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*
 
 # Setup WHMCS
 RUN echo "**** Setting WHMCS Release Version ****" && \
@@ -127,14 +156,6 @@ RUN echo "**** Setting WHMCS Release Version ****" && \
     curl --user-agent "Mozilla" -o /whmcs/whmcs.zip -L \
         https://releases.whmcs.com/v2/pkgs/whmcs-${WHMCS_RELEASE}-release.1.zip
 
-# # Setup nginx
-# RUN echo "**** Setting Up nginx ****" && \
-#     mkdir -p /var/www && \
-#     chown -R abc:abc /var/www && \
-#     ln -svf /dev/stdout /var/log/nginx/access.log && \
-#     ln -svf /dev/stderr /var/log/nginx/error.log && \
-#     rm /etc/nginx/conf.d/*
-
 COPY root/ /
 
 # ssmtp service for SMTP Relay
@@ -142,4 +163,4 @@ COPY root/ /
 
 VOLUME /config
 
-EXPOSE 9000
+EXPOSE 80

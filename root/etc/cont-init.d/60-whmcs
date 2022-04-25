@@ -1,7 +1,8 @@
 #!/usr/bin/with-contenv bash
 
-echo "**** Create WHMCS Directories: /config/whmcs | /config/www/whmcs | /var/www ****"
-mkdir -p /config/whmcs /config/www/whmcs /var/www
+echo "**** Create WHMCS Directories: /config/whmcs | /config/www/whmcs ****"
+mkdir -p /config/whmcs /config/www/whmcs && \
+  chown abc:abc /config/whmcs /config/www/whmcs
 
 echo "**** Extracting WHMCS Release: /config/www/whmcs ****"
 if [ ! -f "/config/www/whmcs/index.php" ]; then
@@ -10,25 +11,22 @@ fi
 
 echo "**** Setting WHMCS Configuration ****"
 if [ ! -f "/config/www/whmcs/configuration.php" ]; then
-  echo "Missing WHMCS Configuration: /config/www/whmcs/configuration.php"
   if [ ! -f "/config/whmcs/configuration.php" ] && [ -f "/config/www/whmcs/configuration.php.new" ]; then
-    echo "Copying WHMCS Configuration Template: /config/www/whmcs/configuration.php.new"
-    cp /config/www/whmcs/configuration.php.new /config/whmcs/configuration.php
+    cp -v /config/www/whmcs/configuration.php.new /config/whmcs/configuration.php
   fi
-  echo "Linking WHMCS Configuration: /config/whmcs/configuration.php"
-  ln -s /config/whmcs/configuration.php /config/www/whmcs/configuration.php
+  cp -vf /config/whmcs/configuration.php /config/www/whmcs/configuration.php
 fi
 
 echo "**** Setting Permissions: /config/whmcs ****"
 if [ -d "/config/whmcs" ]; then
-  if [[ "$(stat -c '%U' "/config/whmcs")" != "abc" ]]; then
+  if [ "$(stat -c '%U' '/config/whmcs')" != "abc" ]; then
     chown -R abc:abc /config/whmcs
   fi
 fi
 
 echo "**** Setting Permissions: /config/www/whmcs ****"
 if [ -d "/config/www/whmcs" ]; then
-  if [[ "$(stat -c '%U' "/config/www/whmcs")" != "abc" ]]; then
+  if [ "$(stat -c '%U' '/config/www/whmcs')" != "abc" ]; then
     chown -R abc:abc /config/www/whmcs
   fi
 fi

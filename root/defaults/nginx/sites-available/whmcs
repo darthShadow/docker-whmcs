@@ -1,0 +1,184 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    underscores_in_headers on;
+    limit_conn conn_limit_per_ip 10;
+    limit_req zone=req_limit_per_ip burst=10 nodelay;
+
+    root /var/www/whmcs;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ [^/]\.php(/|$) {
+        include /etc/nginx/conf.d/php;
+    }
+
+    # Security Headers
+    proxy_hide_header X-Powered-By;
+    proxy_hide_header X-Content-Type-Options;
+
+    # Reverse Proxy Headers
+    proxy_http_version 1.1;
+    proxy_set_header Referer $http_referer;
+    proxy_set_header Host $http_host;
+    proxy_set_header Range $http_range;
+    proxy_set_header If-Range $http_if_range;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Real-Port $remote_port;
+    proxy_set_header X-Forwarded-Host $host:$remote_port;
+    proxy_set_header X-Forwarded-Server $host;
+    proxy_set_header X-Forwarded-Port $remote_port;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Ssl on;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $http_connection;
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+    }
+
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+    }
+
+    location = /robots.txt {
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+
+    location ^~ /vendor/ {
+        deny all;
+        return 403;
+    }
+
+    location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc|svg|woff|woff2|ttf)\$ {
+        expires max;
+        access_log off;
+        add_header Cache-Control "public";
+    }
+
+    location ~* \.(?:css|js)\$ {
+        expires 7d;
+        access_log off;
+        add_header Cache-Control "public";
+    }
+
+    location ~ /\.ht {
+        deny  all;
+    }
+
+    # WHMCS Admin
+
+    location ~ /admin/? {
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        location ~ [^/]\.php(/|$) {
+            include /etc/nginx/conf.d/php;
+        }
+    }
+
+    # WHMCS Install
+
+    location ~ /install/? {
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        location ~ [^/]\.php(/|$) {
+            include /etc/nginx/conf.d/php;
+        }
+    }
+
+    # Friendly URL(s) for WHMCS: https://hostup.org/blog/whmcs-friendly-urls-configuration-for-nginx/
+
+    location ~ /announcements/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/announcements/$1;
+    }
+
+    location ~ /download/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/download$1;
+    }
+
+    location ~ /knowledgebase/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/knowledgebase/$1;
+    }
+
+    location ~ /store/ssl-certificates/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/ssl-certificates/$1;
+    }
+
+    location ~ /store/sitelock/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/sitelock/$1;
+    }
+
+    location ~ /store/website-builder/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/website-builder/$1;
+    }
+
+    location ~ /store/order/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/order/$1;
+    }
+
+    location ~ /cart/domain/renew/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/cart/domain/renew$1;
+    }
+
+    location ~ /account/paymentmethods/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/account/paymentmethods$1;
+    }
+
+    location ~ /password/reset/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/password/reset/$1;
+    }
+
+    location ~ /account/security/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/account/security$1;
+    }
+
+    location ~ /subscription?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/subscription$1;
+    }
+
+    # Social Media Authorization
+    location ~ /auth/provider/google_signin/finalize/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=auth/provider/google_signin/finalize$1;
+    }
+
+    location ~ /admin/(addons|apps|search|domains|help\/license|services|setup|utilities\/system\/php-compat)(.*) {
+        rewrite ^/(.*)$ /admin/index.php?rp=/admin/$1$2 last;
+    }
+
+    location ~ /admin/client/?(.*)/paymethods/?(.*)$ {
+        rewrite ^/(.*)$ /admin/index.php?rp=/client/?(.*)/paymethods/$1;
+    }
+
+    location ~ /admin/setup/auth/?(.*)$ {
+        rewrite ^/(.*)$ /admin/index.php?rp=/setup/auth/$1;
+    }
+
+    location ~ /admin/client/?(.*)/tickets/?(.*)$ {
+        rewrite ^/(.*)$ /admin/index.php?rp=/client/?(.*)/tickets/$1;
+    }
+
+    location ~ /admin/client/?(.*)/invoice/?(.*)/capture/?(.*)$ {
+        rewrite ^/(.*)$ /admin/index.php?rp=/client/?(.*)/invoice/?(.*)/capture/$1;
+    }
+
+    location ~ /admin/account/security/two-factor/?(.*)$ {
+        rewrite ^/(.*)$ /admin/index.php?rp=/admin/account/security/two-factor/$1;
+    }
+
+    location ~ /admin/search/intellisearch?(.*)$ {
+        rewrite ^/(.*)$ /admin/index.php?rp=/search/intellisearch/$1;
+    }
+
+}

@@ -1,11 +1,11 @@
 #!/usr/bin/with-contenv bash
 
 # Set default WHMCS cronjob(s)
-cp /defaults/cron/whmcs /etc/cron.d/whmcs
+cp -vf /defaults/cron/whmcs /etc/cron.d/whmcs
 
 mkdir -p /config/crontabs
 
 # Set custom cronjob(s)
-[[ -f /config/crontabs/root ]] && \
+[ -f /config/crontabs/root ] && \
   crontab -u root /config/crontabs/root
 

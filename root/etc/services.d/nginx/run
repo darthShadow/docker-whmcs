@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv bash
+
+echo "Starting nginx ..."
+
+exec /usr/sbin/nginx

@@ -1,49 +1,27 @@
 #!/usr/bin/with-contenv bash
 
-shopt -s nocasematch
-
-: ${PHP_SESSION_SAVE_HANDLER:="files"}
-
-if [[ $PHP_SESSION_SAVE_HANDLER == "files" ]]
- then
-    if [[ ! -d /var/lib/php/sessions ]]; then
-        mkdir -p /var/lib/php/sessions
-        chown -R abc:abc /var/lib/php
-    fi
-    export PHP_SESSION_GC_PROPABILITY=0
- else
-    export PHP_SESSION_GC_PROPABILITY=1
-fi
-
-# Create php-fpm php & pool config directories
-mkdir -p \
-  /etc/php/${PHP_VERSION}/fpm/conf.d/ \
-  /etc/php/${PHP_VERSION}/fpm/pool.d/
-
 # Configure php-fpm php config
-cp /defaults/php/* /etc/php/${PHP_VERSION}/fpm/conf.d/
-
-# Move the default www.conf so it doesn't override any custom configs
-[[ -f /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf ]] && \
-    mv -vf /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf /etc/php/${PHP_VERSION}/fpm/pool.d/00-www.conf
+cp -vf /defaults/php/* /etc/php/${PHP_VERSION}/fpm/conf.d/
 
 # Configure php-fpm globals & pool
-cp /defaults/fpm/* /etc/php/${PHP_VERSION}/fpm/pool.d/
+cp -vf /defaults/fpm/* /etc/php/${PHP_VERSION}/fpm/pool.d/
 
-# create override for local.ini if it doesn't exist, set local timezone
+# Create override for local.ini if it doesn't exist, set local timezone
 mkdir -p \
   /config/php/
 [[ ! -f /config/php/99-local.ini ]] && \
     printf "; Edit this file to override php.ini directives and restart the container\\n\\ndate.timezone = %s\\n" "$TZ" > /config/php/99-local.ini
+chown abc:abc -R /config/php/
 
-# copy user 99-local.ini to image
-cp /config/php/99-local.ini /etc/php/${PHP_VERSION}/fpm/conf.d/99-local.ini
+# Copy user 99-local.ini to image
+cp -vf /config/php/99-local.ini /etc/php/${PHP_VERSION}/fpm/conf.d/99-local.ini
 
-# create override for local.conf if it doesn't exist
+# Create override for local.conf if it doesn't exist
 mkdir -p \
   /config/fpm/
-[[ ! -f /config/fpm/99-local.conf ]] && \
+[ ! -f /config/fpm/99-local.conf ] && \
     printf "; Edit this file to override www.conf and php-fpm.conf directives and restart the container\\n\\n; Pool name\\n[www]\\n\\n" > /config/fpm/99-local.conf
+chown abc:abc -R /config/fpm/
 
-# copy user 99-local.conf to image
-cp /config/fpm/99-local.conf /etc/php/${PHP_VERSION}/fpm/pool.d/99-local.conf
+# Copy user 99-local.conf to image
+cp -vf /config/fpm/99-local.conf /etc/php/${PHP_VERSION}/fpm/pool.d/99-local.conf

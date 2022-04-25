@@ -1,0 +1,6 @@
+#!/usr/bin/with-contenv bash
+
+echo "**** Backing Up WHMCS Configuration ****"
+if [ -s "/config/www/whmcs/configuration.php" ]; then
+  cp -vf /config/www/whmcs/configuration.php /config/whmcs/configuration.php
+fi

@@ -14,6 +14,10 @@ variable "PHP_RELEASE" {
     default = "7.4"
 }
 
+variable "WHMCS_RELEASE" {
+    default = "8.4.1"
+}
+
 # ---- targets ----
 
 target "docker-metadata-action" {}
@@ -24,6 +28,7 @@ target "image" {
   context = "."
   args = {
     PHP_RELEASE = PHP_RELEASE
+    WHMCS_RELEASE = WHMCS_RELEASE
   }
 }
 
