@@ -7,6 +7,7 @@ mkdir -p /config/whmcs /config/www/whmcs && \
 echo "**** Extracting WHMCS Release: /config/www/whmcs ****"
 if [ ! -f "/config/www/whmcs/index.php" ]; then
   unzip -q /whmcs/whmcs.zip -d /config/www/whmcs
+  chown -R abc:abc /config/www/whmcs
 fi
 
 echo "**** Setting WHMCS Configuration ****"

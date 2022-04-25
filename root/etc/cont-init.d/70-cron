@@ -3,7 +3,8 @@
 # Set default WHMCS cronjob(s)
 cp -vf /defaults/cron/whmcs /etc/cron.d/whmcs
 
-mkdir -p /config/crontabs
+mkdir -p /config/crontabs && \
+  chown abc:abc -R /config/crontabs
 
 # Set custom cronjob(s)
 [ -f /config/crontabs/root ] && \

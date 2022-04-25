@@ -33,6 +33,9 @@ if [ ! -f "/config/nginx/sites-available/whmcs" ]; then
   cp -vf /defaults/nginx/sites-available/whmcs /config/nginx/sites-available/whmcs
 fi
 
+echo "**** Set Nginx Permissions ****"
+chown abc:abc -R /config/nginx/
+
 echo "**** Copy Nginx WHMCS Config: /etc/nginx/sites-available/whmcs ****"
 cp -vf /config/nginx/sites-available/whmcs /etc/nginx/sites-available/whmcs
 
