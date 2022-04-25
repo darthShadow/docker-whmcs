@@ -10,3 +10,5 @@ mkdir -p /config/crontabs && \
 [ -f /config/crontabs/root ] && \
   crontab -u root /config/crontabs/root
 
+mkdir -p /config/cron/log && \
+  chown abc:abc -R /config/cron/log
