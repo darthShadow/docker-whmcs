@@ -11,10 +11,10 @@ if [ ! -f "/config/www/whmcs/index.php" ]; then
 fi
 
 echo "**** Setting WHMCS Configuration ****"
-if [ ! -f "/config/www/whmcs/configuration.php" ]; then
-  if [ ! -f "/config/whmcs/configuration.php" ] && [ -f "/config/www/whmcs/configuration.php.new" ]; then
-    cp -v /config/www/whmcs/configuration.php.new /config/whmcs/configuration.php
-  fi
+if [ ! -f "/config/whmcs/configuration.php" ] && [ -f "/config/www/whmcs/configuration.php.new" ]; then
+  cp -v /config/www/whmcs/configuration.php.new /config/whmcs/configuration.php
+fi
+if [ -f "/config/whmcs/configuration.php" ]; then
   cp -vf /config/whmcs/configuration.php /config/www/whmcs/configuration.php
 fi
 
