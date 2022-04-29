@@ -1,8 +1,8 @@
 #!/usr/bin/with-contenv bash
 
-echo "**** Create WHMCS Directories: /config/whmcs | /config/www/whmcs | /config/www/whmcs_storage ****"
-mkdir -p /config/whmcs /config/www/whmcs /config/www/whmcs_storage && \
-  chown abc:abc /config/whmcs /config/www/whmcs /config/www/whmcs_storage
+echo "**** Create WHMCS Directories: /config/whmcs | /config/www/whmcs ****"
+mkdir -p /config/whmcs /config/www/whmcs && \
+  chown abc:abc /config/whmcs /config/www/whmcs
 
 echo "**** Extracting WHMCS Release: /config/www/whmcs ****"
 if [ ! -f "/config/www/whmcs/index.php" ]; then
@@ -36,6 +36,17 @@ echo "**** Linking WHMCS: /config/www/whmcs - /var/www/whmcs ****"
 if [ ! -L "/var/www/whmcs" ]; then
   rm -rf /var/www/whmcs
   ln -svf /config/www/whmcs /var/www/whmcs
+fi
+
+echo "**** Create WHMCS Storage Directories: /config/www/whmcs_storage/{whmcs_updater_tmp_dir,downloads,attachments/projects,templates_c} ****"
+mkdir -p /config/www/whmcs_storage/{whmcs_updater_tmp_dir,downloads,attachments/projects,templates_c} && \
+  chown abc:abc /config/www/whmcs_storage/{whmcs_updater_tmp_dir,downloads,attachments/projects,templates_c}
+
+echo "**** Setting Storage Permissions: /config/www/whmcs_storage ****"
+if [ -d "/config/www/whmcs_storage" ]; then
+  if [ "$(stat -c '%U' '/config/www/whmcs_storage')" != "abc" ]; then
+    chown -R abc:abc /config/www/whmcs_storage
+  fi
 fi
 
 echo "**** Linking WHMCS Storage: /config/www/whmcs_storage - /var/www/whmcs_storage ****"
