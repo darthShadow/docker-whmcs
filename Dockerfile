@@ -17,6 +17,8 @@ ENV TZ="UTC" PGID="1000" PUID="1000"
 
 ENV AUTH_USER="whmcs" AUTH_PASS="whmcs@nginx:2022"
 
+ENV WHMCS_SERVER_IP="\$server_addr"
+
 ENV DEBIAN_FRONTEND="noninteractive"
 
 # Install nginx and PHP

@@ -21,6 +21,9 @@ if [ ! -f "/config/nginx/conf.d/php" ]; then
   cp -vf /defaults/nginx/conf.d/php /config/nginx/conf.d/php
 fi
 
+echo "**** Update WHMCS Server IP: /config/nginx/conf.d/php ****"
+sed -i "s/WHMCS_SERVER_IP/${WHMCS_SERVER_IP}/" /config/nginx/conf.d/php
+
 echo "**** Copy Nginx PHP Config: /etc/nginx/conf.d/php ****"
 cp -vf /config/nginx/conf.d/php /etc/nginx/conf.d/php
 
