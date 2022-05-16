@@ -146,7 +146,7 @@ server {
         rewrite ^/(.*)$ /index.php?rp=auth/provider/google_signin/finalize$1;
     }
 
-    location ~ /admin/(addons|apps|search|domains|help\/license|billing|logs|services|setup|user\/list|utilities\/system\/php-compat)(.*) {
+    location ~ /admin/(addons|apps|search|domains|help\/license|billing|logs|services|setup|user|utilities\/system\/php-compat)(.*) {
         rewrite ^/(.*)$ /admin/index.php?rp=/admin/$1$2 last;
     }
 
