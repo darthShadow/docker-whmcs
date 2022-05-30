@@ -85,7 +85,7 @@ Container images are configured using parameters passed at runtime (such as thos
 | `-e PUID=1000` | for UserID |
 | `-e PGID=1000` | for GroupID |
 | `-e TZ=UTC` | Specify a timezone to use. Ex: UTC |
-| `-e AUTH_USER=UTC` | Username for the `/admin` pages |
-| `-e AUTH_USER=UTC` | Password for the `/admin` pages |
+| `-e AUTH_USER=whmcs` | Username for the `/admin` pages |
+| `-e AUTH_USER=whmcs@server:2022` | Password for the `/admin` pages |
 | `-e WHMCS_SERVER_IP=1.1.1.1` | Required to validate your WHMCS licence (use your docker host public IP address) |
 | `-v /config` | WHMCS data storage location |
