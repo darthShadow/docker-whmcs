@@ -30,7 +30,7 @@ cp -vf /config/nginx/conf.d/php /etc/nginx/conf.d/php
 echo "**** Copy Nginx Admin Config: /etc/nginx/conf.d/admin-{auth,noauth} ****"
 cp -vf /defaults/nginx/conf.d/admin-{auth,noauth} /etc/nginx/conf.d/
 
-if [ -z ${AUTH_USER+x} ] && [ -z ${AUTH_PASS+x} ]; then
+if [[ ! ${AUTH_USER} ]] && [[ ! ${AUTH_PASS} ]]; then
     echo "**** Skipped creation of .htpasswd due to empty AUTH_USER & AUTH_PASS ****"
     ln -svf /etc/nginx/conf.d/admin-noauth /etc/nginx/conf.d/admin
 else
