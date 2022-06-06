@@ -27,8 +27,12 @@ sed -i "s/WHMCS_SERVER_IP/${WHMCS_SERVER_IP}/" /config/nginx/conf.d/php
 echo "**** Copy Nginx PHP Config: /etc/nginx/conf.d/php ****"
 cp -vf /config/nginx/conf.d/php /etc/nginx/conf.d/php
 
-echo "**** Generate Nginx .htpasswd: /config/nginx/.htpasswd ****"
-rm -vf /etc/nginx/.htpasswd && htpasswd -c -b -B -C 8 /etc/nginx/.htpasswd ${AUTH_USER} ${AUTH_PASS}
+if [ -z ${AUTH_USER+x} ] && [ -z ${AUTH_PASS+x} ]; then
+    echo "**** Skipped creation of .htpasswd due to empty AUTH_USER & AUTH_PASS ****"
+else
+    echo "**** Generate Nginx .htpasswd: /config/nginx/.htpasswd ****"
+    rm -vf /etc/nginx/.htpasswd && htpasswd -c -b -B -C 8 /etc/nginx/.htpasswd ${AUTH_USER} ${AUTH_PASS}
+fi
 
 echo "**** Create default Nginx WHMCS Config: /config/nginx/sites-available/whmcs ****"
 if [ ! -f "/config/nginx/sites-available/whmcs" ]; then
