@@ -1,10 +1,16 @@
 #!/usr/bin/with-contenv bash
 
-# Set default WHMCS cronjob(s)
-cp -vf /defaults/cron/whmcs /etc/cron.d/whmcs
-
 mkdir -p /config/crontabs && \
   chown abc:abc -R /config/crontabs
+
+echo "**** Create default whmcs crontab: /config/crontabs/whmcs ****"
+if [ ! -f "/config/crontabs/whmcs" ]; then
+  cp -vf /defaults/cron/whmcs /config/crontabs/whmcs
+  chown abc:abc /config/crontabs/whmcs
+fi
+
+echo "**** Set whmcs crontab: /config/crontabs/whmcs - /etc/cron.d/whmcs ****"
+cp -vf /config/crontabs/whmcs /etc/cron.d/whmcs
 
 # Set custom cronjob(s)
 [ -f /config/crontabs/root ] && \
