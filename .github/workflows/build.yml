@@ -47,12 +47,8 @@ jobs:
             org.opencontainers.image.description=WHMCS Docker Image
             org.opencontainers.image.vendor=${{ github.repository_owner }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{raw}}
             type=sha
-            type=raw,value=${{ matrix.name }}
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
 
       - name: Login to GitHub Container Registry
