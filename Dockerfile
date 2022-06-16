@@ -17,7 +17,7 @@ ENV TZ="UTC" PGID="1000" PUID="1000"
 
 ENV AUTH_USER="" AUTH_PASS=""
 
-ENV WHMCS_SERVER_IP="\$server_addr"
+ENV WHMCS_SERVER_IP="\$server_addr" WHMCS_SERVER_URL="_"
 
 ENV DEBIAN_FRONTEND="noninteractive"
 
