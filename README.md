@@ -50,6 +50,7 @@ services:
       - AUTH_USER=whmcs
       - AUTH_PASS=whmcs@server:2022
       - WHMCS_SERVER_IP=1.1.1.1
+      - WHMCS_SERVER_URL=whmcs.example.com
     volumes:
       - /path/to/whmcs:/config
     ports:
@@ -68,6 +69,7 @@ docker run -d \
   -e AUTH_USER=whmcs \
   -e AUTH_PASS=whmcs@server:2022 \
   -e WHMCS_SERVER_IP=1.1.1.1 \
+  -e WHMCS_SERVER_URL=whmcs.example.com \
   -p 8043:80 \
   -v /path/to/whmcs:/config \
   --restart unless-stopped \
@@ -88,4 +90,5 @@ Container images are configured using parameters passed at runtime (such as thos
 | `-e AUTH_USER=whmcs` (optional) | Username for the `/admin` pages |
 | `-e AUTH_USER=whmcs@server:2022` (optional) | Password for the `/admin` pages |
 | `-e WHMCS_SERVER_IP=1.1.1.1` | Required to validate your WHMCS licence (use your docker host public IP address) |
+| `-e WHMCS_SERVER_URL=whmcs.example.com` | Required to validate your WHMCS licence |
 | `-v /config` | WHMCS data storage location |
