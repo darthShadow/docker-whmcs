@@ -45,6 +45,9 @@ if [ ! -f "/config/nginx/sites-available/whmcs" ]; then
   cp -vf /defaults/nginx/sites-available/whmcs /config/nginx/sites-available/whmcs
 fi
 
+echo "**** Update WHMCS Server URL: /config/nginx/sites-available/whmcs ****"
+sed -i "s/server_name _/server_name ${WHMCS_SERVER_URL}/" /config/nginx/sites-available/whmcs
+
 echo "**** Set Nginx Permissions ****"
 chown abc:abc -R /config/nginx/
 
