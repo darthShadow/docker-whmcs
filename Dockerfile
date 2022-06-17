@@ -149,7 +149,7 @@ RUN echo "**** Setting Up nginx ****" && \
 
 # Setup WHMCS
 RUN echo "**** Setting WHMCS Release Version ****" && \
-    if [ -z ${WHMCS_RELEASE+x} ]; then \
+    if [ "x${WHMCS_RELEASE}" = "x" ]; then \
         WHMCS_RELEASE=$(curl -sX GET 'https://api1.whmcs.com/download/latest?type=stable' \
         | jq -r '.version'); \
     fi && \
