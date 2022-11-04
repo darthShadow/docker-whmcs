@@ -50,6 +50,7 @@ jobs:
             type=semver,pattern={{raw}}
             type=sha
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/develop' }}
 
       - name: Login to GitHub Container Registry
         id: ghcr_login
