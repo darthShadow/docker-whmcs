@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM lscr.io/linuxserver/baseimage-ubuntu:focal
+FROM lscr.io/linuxserver/baseimage-ubuntu:jammy
 
 ARG BUILD_DATE
 LABEL build_date="Build-date:- ${BUILD_DATE}"
