@@ -84,7 +84,7 @@ RUN echo "**** Install Dependencies ****" && \
         /tmp/* \
         /var/lib/apt/lists/* \
         /var/tmp/* && \
-    rm /var/log/lastlog /var/log/faillog
+    rm -f /var/log/lastlog /var/log/faillog
 
 # Set default php-cli & php-fpm version to match $PHP_VERSION
 RUN update-alternatives --set php /usr/bin/php${PHP_VERSION} && \
