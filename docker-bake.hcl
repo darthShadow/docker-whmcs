@@ -15,7 +15,7 @@ variable "PHP_RELEASE" {
 }
 
 variable "WHMCS_RELEASE" {
-    default = "8.7.1"
+    default = "8.7.3"
 }
 
 # ---- targets ----
