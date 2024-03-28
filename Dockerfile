@@ -6,7 +6,7 @@ LABEL build_date="Build-date:- ${BUILD_DATE}"
 LABEL maintainer="darthShadow"
 
 ARG TARGETARCH
-# 8.1
+# 7.4
 ARG PHP_RELEASE
 # 8.9.0
 ARG WHMCS_RELEASE
