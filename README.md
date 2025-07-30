@@ -6,7 +6,7 @@ Ready to use docker image for WHMCS environment.
 ## Features
 -----------
 
-* Using latest php version 7.4
+* Using latest php version 8.2
 * Ioncube loader ready
 * Nginx server configuration for WHMCS
 * Installed default cron for WHMCS

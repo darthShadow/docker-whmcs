@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1.4
-FROM lscr.io/linuxserver/baseimage-ubuntu:jammy
+FROM lscr.io/linuxserver/baseimage-ubuntu:noble
 
 ARG BUILD_DATE
 LABEL build_date="Build-date:- ${BUILD_DATE}"
 LABEL maintainer="darthShadow"
 
 ARG TARGETARCH
-# 8.1
+# 8.2
 ARG PHP_RELEASE
-# 8.9.0
+# 8.13.1
 ARG WHMCS_RELEASE
 
 ENV PHP_VERSION=${PHP_RELEASE}
@@ -42,8 +42,8 @@ RUN echo "**** Install Dependencies ****" && \
         zip && \
     echo "**** Add PPA: ondrej/php ****" && \
     add-apt-repository -y "ppa:ondrej/php" && \
-    echo "**** Add PPA: ondrej/nginx-mainline ****" && \
-    add-apt-repository -y "ppa:ondrej/nginx-mainline" && \
+    echo "**** Add PPA: ondrej/nginx ****" && \
+    add-apt-repository -y "ppa:ondrej/nginx" && \
     echo "**** Update Repositories ****" && \
     apt-get -y update && \
     echo "**** Upgrade Packages ****" && \
@@ -51,7 +51,7 @@ RUN echo "**** Install Dependencies ****" && \
     echo "**** Install Nginx Packages ****" && \
     apt-get -y install --no-install-recommends \
         apache2-utils \
-        nginx-full && \
+        nginx && \
     echo "**** Install PHP Packages ****" && \
     apt-get -y install --no-install-recommends \
         php-pear \
@@ -132,7 +132,7 @@ RUN case ${TARGETARCH} in \
     esac && \
     echo "**** Installing ionCube for PHP: Architecture: ${IONCUBE_ARCH} ****" && \
     mkdir /tmp/ioncube && cd /tmp/ioncube && \
-    curl --user-agent "Mozilla" -o ioncube.zip http://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_${IONCUBE_ARCH}.zip && \
+    curl --user-agent "Mozilla" -o ioncube.zip https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_${IONCUBE_ARCH}.zip && \
     unzip -q ioncube.zip && mkdir -p /usr/lib/php/ioncube && cp -vf ioncube/ioncube_loader_lin_${PHP_VERSION}.so /usr/lib/php/ioncube/ && \
     echo "zend_extension = /usr/lib/php/ioncube/ioncube_loader_lin_${PHP_VERSION}.so" > /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini && \
     ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-ioncube.ini && \
