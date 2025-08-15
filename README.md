@@ -3,8 +3,11 @@ WHMCS Docker Image
 
 Ready to use docker image for WHMCS environment.
 
-## Features
+
 -----------
+
+
+## Features
 
 * Using latest php version 8.2
 * Ioncube loader ready
@@ -14,8 +17,11 @@ Ready to use docker image for WHMCS environment.
 * Multi-arch image supporting both `x86-64` & `arm64`
 * (Optional) htpasswd-protected `/admin` pages for easy protection from bots
 
-## Supported Architectures
+
 --------------------------
+
+
+## Supported Architectures
 
 We utilise the docker manifest for multi-platform awareness. More information is available from docker [here](https://github.com/docker/distribution/blob/master/docs/spec/manifest-v2-2.md#manifest-list).
 
@@ -28,8 +34,11 @@ The architectures supported by this image are:
 | x86-64 | ✅ |
 | arm64 | ✅ |
 
-## Usage
+
 --------
+
+
+## Usage
 
 Here are some example snippets to help you get started creating a container.
 
@@ -76,8 +85,12 @@ docker run -d \
   ghcr.io/darthshadow/whmcs:latest
 ```
 
-## Parameters
+
 -------------
+
+
+
+## Parameters
 
 Container images are configured using parameters passed at runtime (such as those above). These parameters are separated by a colon and indicate `<external>:<internal>` respectively. For example, `-p 8080:80` would expose port `80` from inside the container to be accessible from the host's IP on port `8080` outside the container.
 
@@ -92,3 +105,6 @@ Container images are configured using parameters passed at runtime (such as thos
 | `-e WHMCS_SERVER_IP=1.1.1.1` | Required to validate your WHMCS licence (use your docker host public IP address) |
 | `-e WHMCS_SERVER_URL=whmcs.example.com` | Required to validate your WHMCS licence |
 | `-v /config` | WHMCS data storage location |
+
+
+-------------

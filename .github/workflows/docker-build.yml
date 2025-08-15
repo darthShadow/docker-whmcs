@@ -1,6 +1,10 @@
 ---
 name: Docker Build
 
+defaults:
+  run:
+    shell: bash
+
 'on':
   workflow_call:
     inputs:
@@ -26,53 +30,73 @@ name: Docker Build
         default: 'WHMCS Docker Image'
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-image:
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runs-on: ubuntu-24.04
+          - platform: linux/arm64
+            runs-on: ubuntu-24.04-arm
+
+    name: Build Docker Image for ${{ matrix.platform }}
+    runs-on: ${{ matrix.runs-on }}
+
     steps:
-      - name: Setup QEMU
-        id: setup_qemu
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
-
-      - name: Set up Docker Buildx
-        id: setup_buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-          version: latest
-          driver-opts: image=moby/buildkit:master
-
-      - name: Checkout
-        id: checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Docker Metadata
-        id: docker_meta
+      - name: Set OWNER_NAME Variable
+        run: |
+          echo "OWNER_NAME=`echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]'`" >> ${GITHUB_ENV}
+
+      - name: Set PLATFORM Variable
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Extract Metadata (tags, labels) for Docker
+        id: meta
         uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,manifest-descriptor
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/whmcs
+            ghcr.io/${{ env.OWNER_NAME }}/whmcs
           labels: |
             org.opencontainers.image.title=whmcs
             org.opencontainers.image.description=${{ inputs.image_description }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}/pkgs/container/whmcs
             org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.authors=${{ github.repository_owner }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.revision=${{ github.sha }}
           tags: |
             type=semver,pattern={{raw}}
             type=sha
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=pr
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{
+              github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+            }}
             type=raw,value=beta,enable=${{ github.ref == 'refs/heads/develop' }}
             ${{ inputs.extra_tags }}
+          bake-target: image-single
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
-        id: ghcr_login
         if: inputs.push_enabled && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Build Date
@@ -82,22 +106,154 @@ jobs:
           echo "**** Setting build date to $BUILD_DATE ****"
           echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
 
-      - name: Build and Push
-        id: docker_build
+      - name: Build and Publish Image Digest
+        id: build
         uses: docker/bake-action@v6
         with:
           source: .
           files: |
             ./docker-bake.hcl
-            ${{ steps.docker_meta.outputs.bake-file }}
+            cwd://${{ steps.meta.outputs.bake-file-labels }}
+            cwd://${{ steps.meta.outputs.bake-file-annotations }}
           set: |
-            image.args.BUILD_DATE=${{ steps.gen_date.outputs.build_date }}
-            ${{ inputs.whmcs_version != '' && format('image.args.WHMCS_RELEASE={0}', inputs.whmcs_version) || '' }}
-          targets: publish
-          push: ${{ inputs.push_enabled }}
+            image-single.args.BUILD_DATE=${{ steps.gen_date.outputs.build_date }}
+            ${{
+              inputs.whmcs_version != '' &&
+              format('image-single.args.WHMCS_RELEASE={0}', inputs.whmcs_version) || ''
+            }}
+            image-single.platform=${{ matrix.platform }}
+            image-single.output=type=image,name=ghcr.io/${{
+              env.OWNER_NAME
+            }}/whmcs,push-by-digest=true,name-canonical=true,push=${{ inputs.push_enabled }}
+            image-single.tags=
+          targets: image-single
           provenance: false
 
+      - name: Export Image Digest
+        run: |
+          mkdir -p /tmp/digests
+          # Extract digest from metadata since tags are empty and digest output will be empty
+          metadata='${{ steps.build.outputs.metadata }}'
+          echo "Extracting digest from metadata (tags are intentionally empty)..."
+          echo "Metadata: $metadata"
+          # Parse digest from JSON metadata
+          digest=$(echo "$metadata" | jq -r '."image-single"."containerimage.digest" // empty' 2>/dev/null || echo "")
+          if [ -n "$digest" ] && [ "$digest" != "null" ] && [ "$digest" != "empty" ]; then
+            echo "Found digest: $digest"
+            touch "/tmp/digests/${digest#sha256:}"
+          else
+            echo "::error::Unable to extract image digest from metadata"
+            echo "::error::This is required for the multi-arch manifest creation"
+            exit 1
+          fi
+
+      - name: Upload Image Digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM }}
+          path: /tmp/digests/*
+          retention-days: 1
+          if-no-files-found: error
+
+  merge-image:
+    name: Merge & Push Final Docker Image
+    runs-on: ubuntu-24.04
+    needs:
+      - build-image
+
+    steps:
+      - name: Download Image Digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set OWNER_NAME Variable
+        run: |
+          echo "OWNER_NAME=`echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]'`" >> ${GITHUB_ENV}
+
+      - name: Extract Metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: |
+            ghcr.io/${{ env.OWNER_NAME }}/whmcs
+          labels: |
+            org.opencontainers.image.title=whmcs
+            org.opencontainers.image.description=${{ inputs.image_description }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}/pkgs/container/whmcs
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.authors=${{ github.repository_owner }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            type=semver,pattern={{raw}}
+            type=sha
+            type=ref,event=pr
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{
+              github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+            }}
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/develop' }}
+            ${{ inputs.extra_tags }}
+
+      - name: Extract Tags
+        shell: python
+        run: |
+          import json, os
+
+          metadata_json = os.environ['DOCKER_METADATA_OUTPUT_JSON']
+          metadata = json.loads(metadata_json)
+
+          tags = [f"--tag '{tag}'" for tag in metadata["tags"]]
+          tags_string = " ".join(tags)
+
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f"TAGS={tags_string}\n")
+
+      - name: Extract Annotations
+        shell: python
+        run: |
+          import json, os
+
+          metadata_json = os.environ['DOCKER_METADATA_OUTPUT_JSON']
+          metadata = json.loads(metadata_json)
+
+          annotations = [f"--annotation '{annotation}'" for annotation in metadata["annotations"]]
+          annotations_string = " ".join(annotations)
+
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f"ANNOTATIONS={annotations_string}\n")
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: inputs.push_enabled && github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create & Push Manifest List
+        if: inputs.push_enabled && github.event_name != 'pull_request'
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+          ${{ env.TAGS }} \
+          ${{ env.ANNOTATIONS }} \
+          $(printf 'ghcr.io/${{ env.OWNER_NAME }}/whmcs@sha256:%s ' *)
+
+      - name: Inspect Multi-Platform Image
+        if: inputs.push_enabled && github.event_name != 'pull_request'
+        run: |
+          docker buildx imagetools inspect --raw ghcr.io/${{ env.OWNER_NAME }}/whmcs:${{ steps.meta.outputs.version }}
+
       - name: Cleanup
-        id: cleanup
         run: |
           rm -f ${HOME}/.docker/config.json

@@ -2,14 +2,16 @@
 FROM lscr.io/linuxserver/baseimage-ubuntu:noble
 
 ARG BUILD_DATE
-LABEL build_date="Build-date:- ${BUILD_DATE}"
-LABEL maintainer="darthShadow"
 
 ARG TARGETARCH
 # 8.2
 ARG PHP_RELEASE
 # 8.13.1
 ARG WHMCS_RELEASE
+
+LABEL build_date="Date:- ${BUILD_DATE}"
+LABEL build_version="Version:- WHMCS ${WHMCS_RELEASE:+v}${WHMCS_RELEASE:-latest} on PHP v${PHP_RELEASE}"
+LABEL maintainer="darthShadow"
 
 ENV PHP_VERSION=${PHP_RELEASE}
 

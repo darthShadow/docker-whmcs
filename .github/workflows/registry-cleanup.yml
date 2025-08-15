@@ -1,6 +1,18 @@
 ---
 name: Registry Cleanup
 
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
 'on':
   schedule:
     # Run weekly on Sundays at 3:00 AM UTC (after dependency updates)
@@ -10,7 +22,7 @@ name: Registry Cleanup
       dry_run:
         description: 'Dry run (list packages without deleting)'
         required: false
-        default: false
+        default: true
         type: boolean
       retention_months:
         description: 'Number of months to keep untagged images'
@@ -24,10 +36,7 @@ env:
 
 jobs:
   cleanup-untagged:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    runs-on: ubuntu-24.04
     steps:
       - name: Log into registry ${{ env.REGISTRY }}
         uses: docker/login-action@v3
@@ -42,14 +51,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const packageName = repo.toLowerCase();
+            const packageName = 'whmcs';
             const dryRun = '${{ github.event.inputs.dry_run }}' === 'true';
             const retentionMonths = parseInt('${{ github.event.inputs.retention_months }}' || '3');
             const cutoffDate = new Date();
             cutoffDate.setMonth(cutoffDate.getMonth() - retentionMonths);
 
-            console.log(`🧹 Starting cleanup for ${owner}/${packageName}`);
+            console.log(`🧹 Starting clean up for ${owner}/${packageName}`);
             console.log(`📊 Dry run: ${dryRun}, Retention: ${retentionMonths} months`);
             console.log(`📅 Cutoff date: ${cutoffDate.toISOString().split('T')[0]}`);
 
@@ -75,7 +83,9 @@ jobs:
                 new Date(version.created_at) < cutoffDate
               );
 
-              console.log(`📅 Found ${oldUntaggedVersions.length} untagged versions older than ${retentionMonths} months`);
+              console.log(
+                `📅 Found ${oldUntaggedVersions.length} untagged versions older than ${retentionMonths} months`
+              );
 
               if (oldUntaggedVersions.length === 0) {
                 console.log(`✅ Nothing to clean up. All untagged versions are newer than ${retentionMonths} months.`);
