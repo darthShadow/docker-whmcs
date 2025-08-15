@@ -1,0 +1,134 @@
+---
+name: Registry Cleanup
+
+on:
+  schedule:
+    # Run weekly on Sundays at 3:00 AM UTC (after dependency updates)
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (list packages without deleting)'
+        required: false
+        default: false
+        type: boolean
+      retention_months:
+        description: 'Number of months to keep untagged images'
+        required: false
+        default: '3'
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  cleanup-untagged:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up untagged images
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const packageName = repo.toLowerCase();
+            const dryRun = '${{ github.event.inputs.dry_run }}' === 'true';
+            const retentionMonths = parseInt('${{ github.event.inputs.retention_months }}' || '3');
+            const cutoffDate = new Date();
+            cutoffDate.setMonth(cutoffDate.getMonth() - retentionMonths);
+
+            console.log(`🧹 Starting cleanup for ${owner}/${packageName}`);
+            console.log(`📊 Dry run: ${dryRun}, Retention: ${retentionMonths} months`);
+            console.log(`📅 Cutoff date: ${cutoffDate.toISOString().split('T')[0]}`);
+
+            try {
+              // Get all package versions
+              const { data: versions } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                package_type: 'container',
+                package_name: packageName,
+                username: owner,
+                per_page: 100
+              });
+
+              console.log(`📦 Found ${versions.length} total package versions`);
+
+              // Filter untagged versions older than cutoff date
+              const untaggedVersions = versions.filter(version =>
+                version.metadata.container.tags.length === 0
+              );
+
+              console.log(`🏷️  Found ${untaggedVersions.length} untagged versions`);
+
+              const oldUntaggedVersions = untaggedVersions.filter(version =>
+                new Date(version.created_at) < cutoffDate
+              );
+
+              console.log(`📅 Found ${oldUntaggedVersions.length} untagged versions older than ${retentionMonths} months`);
+
+              if (oldUntaggedVersions.length === 0) {
+                console.log(`✅ Nothing to clean up. All untagged versions are newer than ${retentionMonths} months.`);
+                return;
+              }
+
+              // Sort by created date (oldest first)
+              const sortedUntagged = oldUntaggedVersions
+                .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+              console.log(`🗑️  Will delete ${sortedUntagged.length} old untagged versions`);
+
+              let deletedCount = 0;
+              let failedCount = 0;
+
+              for (const version of sortedUntagged) {
+                const createdDate = new Date(version.created_at).toISOString().split('T')[0];
+                const sizeFormatted = (version.metadata.container.size_bytes / (1024*1024)).toFixed(1);
+
+                console.log(`📋 Version ${version.id}: created ${createdDate}, size ${sizeFormatted}MB`);
+
+                if (!dryRun) {
+                  try {
+                    await github.rest.packages.deletePackageVersionForUser({
+                      package_type: 'container',
+                      package_name: packageName,
+                      username: owner,
+                      package_version_id: version.id
+                    });
+                    console.log(`✅ Deleted version ${version.id}`);
+                    deletedCount++;
+                  } catch (error) {
+                    console.log(`❌ Failed to delete version ${version.id}: ${error.message}`);
+                    failedCount++;
+                  }
+                } else {
+                  console.log(`🔍 Would delete version ${version.id} (dry run)`);
+                  deletedCount++;
+                }
+              }
+
+              console.log(`\n📊 Cleanup Summary:`);
+              console.log(`   Total versions: ${versions.length}`);
+              console.log(`   Untagged versions: ${untaggedVersions.length}`);
+              console.log(`   Older than ${retentionMonths} months: ${oldUntaggedVersions.length}`);
+              if (dryRun) {
+                console.log(`   Would delete: ${deletedCount}`);
+              } else {
+                console.log(`   Successfully deleted: ${deletedCount}`);
+                console.log(`   Failed to delete: ${failedCount}`);
+              }
+
+            } catch (error) {
+              console.error(`❌ Error during cleanup: ${error.message}`);
+              throw error;
+            }
