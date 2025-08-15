@@ -44,3 +44,7 @@ target "publish" {
     "linux/arm64"
   ]
 }
+
+target "image-single" {
+  inherits = ["image"]
+}

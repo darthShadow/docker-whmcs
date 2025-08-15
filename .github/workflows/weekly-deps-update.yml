@@ -1,6 +1,14 @@
 ---
 name: Weekly Dependency Update
 
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 'on':
   schedule:
     # Run every Sunday at 2:00 AM UTC
@@ -14,7 +22,7 @@ permissions:
 
 jobs:
   check-new-versions:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       new_minor_version: ${{ steps.version_check.outputs.new_minor_version }}
       latest_version: ${{ steps.version_check.outputs.latest_version }}
@@ -74,7 +82,7 @@ jobs:
           fi
 
   create-version-issue:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check-new-versions
     if: needs.check-new-versions.outputs.new_minor_version != ''
     steps:
@@ -169,7 +177,7 @@ jobs:
             console.log(`Created new issue #${newIssue.data.number}: ${issueTitle}`);
 
   update-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check-new-versions
     if: needs.check-new-versions.outputs.should_build == 'true'
     steps:
@@ -208,7 +216,7 @@ jobs:
     secrets: inherit
 
   create-summary:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [check-new-versions, update-version, build-with-updates]
     if: needs.check-new-versions.outputs.should_build == 'true'
     steps:
@@ -217,10 +225,14 @@ jobs:
           echo "## Weekly Dependency Update Build" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Date**: $(date '+%Y-%m-%dT%H:%M:%S%:z')" >> $GITHUB_STEP_SUMMARY
           echo "- **WHMCS Version**: ${{ needs.check-new-versions.outputs.latest_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Previous Version**: ${{ needs.check-new-versions.outputs.last_built_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: ${{
+            needs.check-new-versions.outputs.last_built_version
+          }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Current Branch**: main" >> $GITHUB_STEP_SUMMARY
           echo "- **Tags**: weekly-$(date '+%Y-%m-%d'), latest-deps" >> $GITHUB_STEP_SUMMARY
           echo "- **Base Image**: Updated with latest security patches" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ needs.check-new-versions.outputs.new_minor_version }}" ]; then
-            echo "- **New Minor Version Available**: ${{ needs.check-new-versions.outputs.new_minor_version }} (issue created)" >> $GITHUB_STEP_SUMMARY
+            echo "- **New Minor Version Available**: ${{
+              needs.check-new-versions.outputs.new_minor_version
+            }} (issue created)" >> $GITHUB_STEP_SUMMARY
           fi
