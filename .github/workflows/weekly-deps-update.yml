@@ -1,10 +1,11 @@
+---
 name: Weekly Dependency Update
 
-on:
+'on':
   schedule:
     # Run every Sunday at 2:00 AM UTC
     - cron: '0 2 * * 0'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:  # Allow manual trigger
 
 permissions:
   contents: write       # Push commits and tags
@@ -34,12 +35,12 @@ jobs:
           LATEST_WHMCS=$(curl -sX GET 'https://api1.whmcs.com/download/latest?type=stable' | jq -r '.version')
           echo "latest_version=${LATEST_WHMCS}" >> $GITHUB_OUTPUT
           echo "Latest WHMCS version: ${LATEST_WHMCS}"
-          
+
           # Extract current minor version from docker-bake.hcl or recent commits
           CURRENT_MINOR=$(git log --oneline -20 | grep -oP 'v\K\d+\.\d+' | head -1 || echo "8.13")
           echo "current_minor=${CURRENT_MINOR}" >> $GITHUB_OUTPUT
           echo "Current minor version: ${CURRENT_MINOR}"
-          
+
           # Get last built version from simple text file
           LAST_BUILT_VERSION="0.0.0"
           if [ -f "WHMCS_VERSION.txt" ]; then
@@ -47,11 +48,11 @@ jobs:
           fi
           echo "last_built_version=${LAST_BUILT_VERSION}" >> $GITHUB_OUTPUT
           echo "Last built WHMCS version: ${LAST_BUILT_VERSION}"
-          
+
           # Extract latest minor version (e.g., 8.13 from 8.13.1)
           LATEST_MINOR=$(echo "${LATEST_WHMCS}" | grep -oP '^\d+\.\d+')
           echo "Latest minor version: ${LATEST_MINOR}"
-          
+
           # Check if we have a new minor version
           if [ "${LATEST_MINOR}" != "${CURRENT_MINOR}" ]; then
             echo "new_minor_version=${LATEST_MINOR}" >> $GITHUB_OUTPUT
@@ -60,7 +61,7 @@ jobs:
             echo "new_minor_version=" >> $GITHUB_OUTPUT
             echo "Same minor version: ${LATEST_MINOR}"
           fi
-          
+
           # Check if WHMCS version has actually updated
           if [ "${LATEST_WHMCS}" != "${LAST_BUILT_VERSION}" ]; then
             echo "version_updated=true" >> $GITHUB_OUTPUT
@@ -85,30 +86,30 @@ jobs:
         run: |
           VERSION="${{ needs.check-new-versions.outputs.latest_version }}"
           MINOR="${{ needs.check-new-versions.outputs.new_minor_version }}"
-          
+
           # Fetch changelog from WHMCS (this might need adjustment based on actual API)
           CHANGELOG_URL="https://docs.whmcs.com/Changelog"
-          
+
           # Create issue body
           cat > issue_body.md << EOF
           ## New WHMCS Minor Version Available: ${MINOR}
-          
+
           **Latest Version**: ${VERSION}
           **Current Minor**: ${{ needs.check-new-versions.outputs.current_minor }}
           **New Minor**: ${MINOR}
-          
+
           ### Action Required
           - [ ] Create new branch: \`version/${MINOR}-php8.2\`
           - [ ] Update docker-bake.hcl with new WHMCS version
           - [ ] Test build with new version
           - [ ] Update README if needed
           - [ ] Create release tag: \`v${VERSION}-v8.2\`
-          
+
           ### Release Information
           - **Changelog**: [WHMCS ${MINOR} Changelog](${CHANGELOG_URL})
           - **Download**: Available via WHMCS API
           - **Detected**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          
+
           ### Branch Creation Commands
           \`\`\`bash
           git checkout -b version/${MINOR}-php8.2
@@ -126,7 +127,7 @@ jobs:
             const issueBody = fs.readFileSync('issue_body.md', 'utf8');
             const newVersion = '${{ needs.check-new-versions.outputs.new_minor_version }}';
             const issueTitle = `[AUTO] New WHMCS Minor Version: ${newVersion}`;
-            
+
             // Check for existing issues with the same version
             const existingIssues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -134,7 +135,7 @@ jobs:
               state: 'open',
               labels: 'new-version'
             });
-            
+
             // Close any existing issues for the same version
             for (const issue of existingIssues.data) {
               if (issue.title.includes(`[AUTO] New WHMCS Minor Version: ${newVersion}`)) {
@@ -145,7 +146,7 @@ jobs:
                   issue_number: issue.number,
                   state: 'closed'
                 });
-                
+
                 // Add a comment explaining why it was closed
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
@@ -155,7 +156,7 @@ jobs:
                 });
               }
             }
-            
+
             // Create the new issue
             const newIssue = await github.rest.issues.create({
               owner: context.repo.owner,
@@ -164,7 +165,7 @@ jobs:
               body: issueBody,
               labels: ['enhancement', 'new-version']
             });
-            
+
             console.log(`Created new issue #${newIssue.data.number}: ${issueTitle}`);
 
   update-version:
@@ -184,12 +185,12 @@ jobs:
           git config --local user.name "GitHub Action"
           git add WHMCS_VERSION.txt
           git commit -m "Update WHMCS version to ${{ needs.check-new-versions.outputs.latest_version }}"
-          
+
           # Create git tag following the existing format: v{whmcs-version}-v{php-version}
           PHP_VERSION="8.2"  # Current PHP version from docker-bake.hcl
           TAG_NAME="v${{ needs.check-new-versions.outputs.latest_version }}-v${PHP_VERSION}"
           git tag "${TAG_NAME}"
-          
+
           git push
           git push origin "${TAG_NAME}"
 
