@@ -1,0 +1,266 @@
+name: Weekly Dependency Update
+
+on:
+  schedule:
+    # Run every Sunday at 2:00 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write       # Push commits and tags
+  packages: write       # Push to GitHub Container Registry
+  issues: write         # Create issues for new versions
+
+jobs:
+  check-new-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      new_minor_version: ${{ steps.version_check.outputs.new_minor_version }}
+      latest_version: ${{ steps.version_check.outputs.latest_version }}
+      current_minor: ${{ steps.version_check.outputs.current_minor }}
+      last_built_version: ${{ steps.version_check.outputs.last_built_version }}
+      should_build: ${{ steps.version_check.outputs.should_build }}
+      version_updated: ${{ steps.version_check.outputs.version_updated }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for version updates
+        id: version_check
+        run: |
+          # Get latest WHMCS version
+          LATEST_WHMCS=$(curl -sX GET 'https://api1.whmcs.com/download/latest?type=stable' | jq -r '.version')
+          echo "latest_version=${LATEST_WHMCS}" >> $GITHUB_OUTPUT
+          echo "Latest WHMCS version: ${LATEST_WHMCS}"
+          
+          # Extract current minor version from docker-bake.hcl or recent commits
+          CURRENT_MINOR=$(git log --oneline -20 | grep -oP 'v\K\d+\.\d+' | head -1 || echo "8.13")
+          echo "current_minor=${CURRENT_MINOR}" >> $GITHUB_OUTPUT
+          echo "Current minor version: ${CURRENT_MINOR}"
+          
+          # Get last built version from simple text file
+          LAST_BUILT_VERSION="0.0.0"
+          if [ -f "WHMCS_VERSION.txt" ]; then
+            LAST_BUILT_VERSION=$(cat WHMCS_VERSION.txt | tr -d '[:space:]')
+          fi
+          echo "last_built_version=${LAST_BUILT_VERSION}" >> $GITHUB_OUTPUT
+          echo "Last built WHMCS version: ${LAST_BUILT_VERSION}"
+          
+          # Extract latest minor version (e.g., 8.13 from 8.13.1)
+          LATEST_MINOR=$(echo "${LATEST_WHMCS}" | grep -oP '^\d+\.\d+')
+          echo "Latest minor version: ${LATEST_MINOR}"
+          
+          # Check if we have a new minor version
+          if [ "${LATEST_MINOR}" != "${CURRENT_MINOR}" ]; then
+            echo "new_minor_version=${LATEST_MINOR}" >> $GITHUB_OUTPUT
+            echo "New minor version detected: ${LATEST_MINOR}"
+          else
+            echo "new_minor_version=" >> $GITHUB_OUTPUT
+            echo "Same minor version: ${LATEST_MINOR}"
+          fi
+          
+          # Check if WHMCS version has actually updated
+          if [ "${LATEST_WHMCS}" != "${LAST_BUILT_VERSION}" ]; then
+            echo "version_updated=true" >> $GITHUB_OUTPUT
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "WHMCS version updated from ${LAST_BUILT_VERSION} to ${LATEST_WHMCS}"
+          else
+            echo "version_updated=false" >> $GITHUB_OUTPUT
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "No WHMCS version change (${LATEST_WHMCS}), skipping build"
+          fi
+
+  create-version-issue:
+    runs-on: ubuntu-latest
+    needs: check-new-versions
+    if: needs.check-new-versions.outputs.new_minor_version != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get WHMCS changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.check-new-versions.outputs.latest_version }}"
+          MINOR="${{ needs.check-new-versions.outputs.new_minor_version }}"
+          
+          # Fetch changelog from WHMCS (this might need adjustment based on actual API)
+          CHANGELOG_URL="https://docs.whmcs.com/Changelog"
+          
+          # Create issue body
+          cat > issue_body.md << EOF
+          ## New WHMCS Minor Version Available: ${MINOR}
+          
+          **Latest Version**: ${VERSION}
+          **Current Minor**: ${{ needs.check-new-versions.outputs.current_minor }}
+          **New Minor**: ${MINOR}
+          
+          ### Action Required
+          - [ ] Create new branch: \`version/${MINOR}-php8.2\`
+          - [ ] Update docker-bake.hcl with new WHMCS version
+          - [ ] Test build with new version
+          - [ ] Update README if needed
+          - [ ] Create release tag: \`v${VERSION}-v8.2\`
+          
+          ### Release Information
+          - **Changelog**: [WHMCS ${MINOR} Changelog](${CHANGELOG_URL})
+          - **Download**: Available via WHMCS API
+          - **Detected**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ### Branch Creation Commands
+          \`\`\`bash
+          git checkout -b version/${MINOR}-php8.2
+          # Update docker-bake.hcl WHMCS_RELEASE default
+          # Test build
+          git push -u origin version/${MINOR}-php8.2
+          \`\`\`
+          EOF
+
+      - name: Create GitHub Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const issueBody = fs.readFileSync('issue_body.md', 'utf8');
+            const newVersion = '${{ needs.check-new-versions.outputs.new_minor_version }}';
+            const issueTitle = `[AUTO] New WHMCS Minor Version: ${newVersion}`;
+            
+            // Check for existing issues with the same version
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'new-version'
+            });
+            
+            // Close any existing issues for the same version
+            for (const issue of existingIssues.data) {
+              if (issue.title.includes(`[AUTO] New WHMCS Minor Version: ${newVersion}`)) {
+                console.log(`Closing existing issue #${issue.number}: ${issue.title}`);
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed'
+                });
+                
+                // Add a comment explaining why it was closed
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: 'Closed automatically - superseded by new issue with updated information.'
+                });
+              }
+            }
+            
+            // Create the new issue
+            const newIssue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: issueBody,
+              labels: ['enhancement', 'new-version']
+            });
+            
+            console.log(`Created new issue #${newIssue.data.number}: ${issueTitle}`);
+
+  build-with-updates:
+    runs-on: ubuntu-latest
+    needs: check-new-versions
+    if: needs.check-new-versions.outputs.should_build == 'true'
+    steps:
+      - name: Setup QEMU
+        id: setup_qemu
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Set up Docker Buildx
+        id: setup_buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          version: latest
+          driver-opts: image=moby/buildkit:master
+
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Docker Metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/whmcs
+          labels: |
+            org.opencontainers.image.title=whmcs
+            org.opencontainers.image.description=WHMCS Docker Image - Weekly Dependency Update
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+          tags: |
+            type=raw,value=weekly-{{date 'YYYY-MM-DD'}}
+            type=raw,value=latest-deps
+
+      - name: Login to GitHub Container Registry
+        id: ghcr_login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Build Date
+        id: gen_date
+        run: |
+          BUILD_DATE=$(date '+%Y-%m-%dT%H:%M:%S%:z')
+          echo "**** Setting build date to $BUILD_DATE ****"
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+
+      - name: Build and Push with Updated Dependencies
+        id: docker_build
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: |
+            ./docker-bake.hcl
+            ${{ steps.docker_meta.outputs.bake-file }}
+          set: |
+            image.args.BUILD_DATE=${{ steps.gen_date.outputs.build_date }}
+            image.args.WHMCS_RELEASE=${{ needs.check-new-versions.outputs.latest_version }}
+          targets: publish
+          push: true
+          provenance: false
+
+      - name: Update version file
+        id: update_version
+        run: |
+          echo "${{ needs.check-new-versions.outputs.latest_version }}" > WHMCS_VERSION.txt
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add WHMCS_VERSION.txt
+          git commit -m "Update WHMCS version to ${{ needs.check-new-versions.outputs.latest_version }}"
+          git push
+
+      - name: Create Release Summary
+        id: summary
+        run: |
+          echo "## Weekly Dependency Update Build" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Date**: ${{ steps.gen_date.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **WHMCS Version**: ${{ needs.check-new-versions.outputs.latest_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: ${{ needs.check-new-versions.outputs.last_built_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Current Branch**: $(git branch --show-current)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags**: weekly-$(date '+%Y-%m-%d'), latest-deps" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base Image**: Updated with latest security patches" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ needs.check-new-versions.outputs.new_minor_version }}" ]; then
+            echo "- **New Minor Version Available**: ${{ needs.check-new-versions.outputs.new_minor_version }} (issue created)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Cleanup
+        id: cleanup
+        run: |
+          rm -f ${HOME}/.docker/config.json
