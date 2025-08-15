@@ -167,100 +167,59 @@ jobs:
             
             console.log(`Created new issue #${newIssue.data.number}: ${issueTitle}`);
 
-  build-with-updates:
+  update-version:
     runs-on: ubuntu-latest
     needs: check-new-versions
     if: needs.check-new-versions.outputs.should_build == 'true'
     steps:
-      - name: Setup QEMU
-        id: setup_qemu
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
-
-      - name: Set up Docker Buildx
-        id: setup_buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-          version: latest
-          driver-opts: image=moby/buildkit:master
-
       - name: Checkout
-        id: checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Docker Metadata
-        id: docker_meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/whmcs
-          labels: |
-            org.opencontainers.image.title=whmcs
-            org.opencontainers.image.description=WHMCS Docker Image - Weekly Dependency Update
-            org.opencontainers.image.vendor=${{ github.repository_owner }}
-          tags: |
-            type=raw,value=weekly-{{date 'YYYY-MM-DD'}}
-            type=raw,value=latest-deps
-
-      - name: Login to GitHub Container Registry
-        id: ghcr_login
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate Build Date
-        id: gen_date
-        run: |
-          BUILD_DATE=$(date '+%Y-%m-%dT%H:%M:%S%:z')
-          echo "**** Setting build date to $BUILD_DATE ****"
-          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
-
-      - name: Build and Push with Updated Dependencies
-        id: docker_build
-        uses: docker/bake-action@v6
-        with:
-          source: .
-          files: |
-            ./docker-bake.hcl
-            ${{ steps.docker_meta.outputs.bake-file }}
-          set: |
-            image.args.BUILD_DATE=${{ steps.gen_date.outputs.build_date }}
-            image.args.WHMCS_RELEASE=${{ needs.check-new-versions.outputs.latest_version }}
-          targets: publish
-          push: true
-          provenance: false
-
-      - name: Update version file
-        id: update_version
+      - name: Update version file and create tag
         run: |
           echo "${{ needs.check-new-versions.outputs.latest_version }}" > WHMCS_VERSION.txt
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add WHMCS_VERSION.txt
           git commit -m "Update WHMCS version to ${{ needs.check-new-versions.outputs.latest_version }}"
+          
+          # Create git tag following the existing format: v{whmcs-version}-v{php-version}
+          PHP_VERSION="8.2"  # Current PHP version from docker-bake.hcl
+          TAG_NAME="v${{ needs.check-new-versions.outputs.latest_version }}-v${PHP_VERSION}"
+          git tag "${TAG_NAME}"
+          
           git push
+          git push origin "${TAG_NAME}"
 
+  build-with-updates:
+    needs: [check-new-versions, update-version]
+    if: needs.check-new-versions.outputs.should_build == 'true'
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      whmcs_version: ${{ needs.check-new-versions.outputs.latest_version }}
+      push_enabled: true
+      extra_tags: |
+        type=raw,value=weekly-{{date 'YYYY-MM-DD'}}
+        type=raw,value=latest-deps
+      image_description: 'WHMCS Docker Image - Weekly Dependency Update'
+    secrets: inherit
+
+  create-summary:
+    runs-on: ubuntu-latest
+    needs: [check-new-versions, update-version, build-with-updates]
+    if: needs.check-new-versions.outputs.should_build == 'true'
+    steps:
       - name: Create Release Summary
-        id: summary
         run: |
           echo "## Weekly Dependency Update Build" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Date**: ${{ steps.gen_date.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Date**: $(date '+%Y-%m-%dT%H:%M:%S%:z')" >> $GITHUB_STEP_SUMMARY
           echo "- **WHMCS Version**: ${{ needs.check-new-versions.outputs.latest_version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Previous Version**: ${{ needs.check-new-versions.outputs.last_built_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Current Branch**: $(git branch --show-current)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Current Branch**: main" >> $GITHUB_STEP_SUMMARY
           echo "- **Tags**: weekly-$(date '+%Y-%m-%d'), latest-deps" >> $GITHUB_STEP_SUMMARY
           echo "- **Base Image**: Updated with latest security patches" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ needs.check-new-versions.outputs.new_minor_version }}" ]; then
             echo "- **New Minor Version Available**: ${{ needs.check-new-versions.outputs.new_minor_version }} (issue created)" >> $GITHUB_STEP_SUMMARY
           fi
-
-      - name: Cleanup
-        id: cleanup
-        run: |
-          rm -f ${HOME}/.docker/config.json
