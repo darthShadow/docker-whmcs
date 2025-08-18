@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.4
-FROM lscr.io/linuxserver/baseimage-ubuntu:noble
+FROM lscr.io/linuxserver/baseimage-ubuntu:jammy
 
 ARG BUILD_DATE
 
 ARG TARGETARCH
-# 8.2
+# 7.4
 ARG PHP_RELEASE
-# 8.13.1
+# 8.8.0
 ARG WHMCS_RELEASE
 
 LABEL build_date="Date:- ${BUILD_DATE}"
