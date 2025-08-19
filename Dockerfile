@@ -4,7 +4,7 @@ FROM lscr.io/linuxserver/baseimage-ubuntu:noble
 ARG BUILD_DATE
 
 ARG TARGETARCH
-# 8.2
+# 8.1
 ARG PHP_RELEASE
 # 8.13.1
 ARG WHMCS_RELEASE
