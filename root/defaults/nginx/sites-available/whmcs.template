@@ -1,0 +1,180 @@
+server {
+    listen 80 default_server;
+    server_name ${WHMCS_SERVER_URL};
+
+    underscores_in_headers on;
+
+    root /var/www/whmcs;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ [^/]\.php(/|$) {
+        include /etc/nginx/conf.d/php;
+    }
+
+    # Security Headers
+    proxy_hide_header X-Powered-By;
+    proxy_hide_header X-Content-Type-Options;
+
+    # Reverse Proxy Headers
+    proxy_http_version 1.1;
+    proxy_set_header Referer $http_referer;
+    proxy_set_header Host $host;
+    proxy_set_header Range $http_range;
+    proxy_set_header If-Range $http_if_range;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Real-Port $remote_port;
+    proxy_set_header X-Forwarded-Host $host:$remote_port;
+    proxy_set_header X-Forwarded-Server $host;
+    proxy_set_header X-Forwarded-Port $remote_port;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Ssl on;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $http_connection;
+
+    set_real_ip_from  10.0.0.0/8;
+    set_real_ip_from  172.16.0.0/12;
+    set_real_ip_from  192.168.0.0/16;
+    real_ip_header    X-Forwarded-For;
+
+    # Uncomment & customize if you want custom error pages
+    # error_page 502 503 504 /50x.html;
+    # location = /50x.html {
+    #     root /usr/share/nginx/html;
+    # }
+
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+    }
+
+    location = /robots.txt {
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+
+    location ~* /(configuration\.php(\..*)?|.+\.(bak|old|orig|swp)|.+~|\.sw[a-p])$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ^~ /vendor/ {
+        deny all;
+        return 403;
+    }
+
+    location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc|svg|woff|woff2|ttf)\$ {
+        expires max;
+        access_log off;
+        add_header Cache-Control "public";
+    }
+
+    location ~* \.(?:css|js)\$ {
+        expires 7d;
+        access_log off;
+        add_header Cache-Control "public";
+    }
+
+    location ~ /\.ht {
+        deny  all;
+    }
+
+    # WHMCS Admin
+
+    location /${WHMCS_ADMIN_PATH} {
+        include /etc/nginx/conf.d/admin;
+    }
+
+    # Friendly URL(s) for WHMCS: https://hostup.org/blog/whmcs-friendly-urls-configuration-for-nginx/
+
+    location ~ /announcements/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/announcements/$1;
+    }
+
+    location ~ /download/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/download$1;
+    }
+
+    location ~ /knowledgebase/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/knowledgebase/$1;
+    }
+
+    location ~ /store/ssl-certificates/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/ssl-certificates/$1;
+    }
+
+    location ~ /store/sitelock/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/sitelock/$1;
+    }
+
+    location ~ /store/website-builder/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/website-builder/$1;
+    }
+
+    location ~ /store/order/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/store/order/$1;
+    }
+
+    location ~ /cart/domain/renew/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/cart/domain/renew$1;
+    }
+
+    location ~ /account/paymentmethods/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/account/paymentmethods$1;
+    }
+
+    location ~ /password/reset/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/password/reset/$1;
+    }
+
+    location ~ /account/security/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/account/security$1;
+    }
+
+    location ~ /subscription?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=/subscription$1;
+    }
+
+    # Social Media Authorization
+    location ~ /auth/provider/google_signin/finalize/?(.*)$ {
+        rewrite ^/(.*)$ /index.php?rp=auth/provider/google_signin/finalize$1;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/(addons|apps|search|domains|help\/license|billing|logs|services|setup|user|utilities\/system\/php-compat)(.*) {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/$1$2 last;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/client/?(.*)/paymethods/?(.*)$ {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/paymethods/$1;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/setup/auth/?(.*)$ {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/setup/auth/$1;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/client/?(.*)/tickets/?(.*)$ {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/tickets/$1;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/client/?(.*)/invoice/?(.*)/capture/?(.*)$ {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/invoice/?(.*)/capture/$1;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/account/security/two-factor/?(.*)$ {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/account/security/two-factor/$1;
+    }
+
+    location ~ /${WHMCS_ADMIN_PATH}/search/intellisearch?(.*)$ {
+        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/search/intellisearch/$1;
+    }
+
+}

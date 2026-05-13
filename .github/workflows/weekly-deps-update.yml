@@ -10,9 +10,10 @@ concurrency:
   cancel-in-progress: true
 
 'on':
-  schedule:
-    # Run every Sunday at 2:00 AM UTC
-    - cron: '0 2 * * 0'
+  # Scheduled runs are disabled by default; uncomment to re-enable.
+  # schedule:
+  #   # Run every Sunday at 2:00 AM UTC
+  #   - cron: '0 2 * * 0'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -26,36 +27,70 @@ jobs:
     outputs:
       new_minor_version: ${{ steps.version_check.outputs.new_minor_version }}
       latest_version: ${{ steps.version_check.outputs.latest_version }}
+      whmcs_sha256: ${{ steps.version_check.outputs.whmcs_sha256 }}
       current_minor: ${{ steps.version_check.outputs.current_minor }}
       last_built_version: ${{ steps.version_check.outputs.last_built_version }}
-      should_build: ${{ steps.version_check.outputs.should_build }}
+      should_build: ${{ steps.base_image.outputs.should_build }}
       version_updated: ${{ steps.version_check.outputs.version_updated }}
+      php_version: ${{ steps.version_check.outputs.php_version }}
+      base_image: ${{ steps.base_image.outputs.base_image }}
+      base_image_digest: ${{ steps.base_image.outputs.base_image_digest }}
+      base_image_changed: ${{ steps.base_image.outputs.base_image_changed }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Check for version updates
         id: version_check
+        env:
+          WHMCS_API_URL: https://api1.whmcs.com/download/latest?type=stable
         run: |
+          set -euo pipefail
+
           # Get latest WHMCS version
-          LATEST_WHMCS=$(curl -sX GET 'https://api1.whmcs.com/download/latest?type=stable' | jq -r '.version')
-          echo "latest_version=${LATEST_WHMCS}" >> $GITHUB_OUTPUT
-          echo "Latest WHMCS version: ${LATEST_WHMCS}"
-
-          # Extract current minor version from docker-bake.hcl or recent commits
-          CURRENT_MINOR=$(git log --oneline -20 | grep -oP 'v\K\d+\.\d+' | head -1 || echo "8.13")
-          echo "current_minor=${CURRENT_MINOR}" >> $GITHUB_OUTPUT
-          echo "Current minor version: ${CURRENT_MINOR}"
-
-          # Get last built version from simple text file
-          LAST_BUILT_VERSION="0.0.0"
-          if [ -f "WHMCS_VERSION.txt" ]; then
-            LAST_BUILT_VERSION=$(cat WHMCS_VERSION.txt | tr -d '[:space:]')
+          api_response=$(curl -fsSL "${WHMCS_API_URL}")
+          LATEST_WHMCS=$(jq -r '.version // empty' <<< "${api_response}")
+          LATEST_WHMCS_SHA256=$(jq -r '.sha256Checksum // empty' <<< "${api_response}")
+          if [ -z "${LATEST_WHMCS}" ] || [ "${LATEST_WHMCS}" = "null" ]; then
+            echo "::error::Failed to fetch latest WHMCS version from API"
+            exit 1
           fi
+          echo "latest_version=${LATEST_WHMCS}" >> $GITHUB_OUTPUT
+          echo "whmcs_sha256=${LATEST_WHMCS_SHA256}" >> $GITHUB_OUTPUT
+          echo "Latest WHMCS version: ${LATEST_WHMCS}"
+          if [ -n "${LATEST_WHMCS_SHA256}" ]; then
+            echo "WHMCS SHA256 verification enabled for ${LATEST_WHMCS}"
+          else
+            echo "WHMCS SHA256 verification skipped; API did not return sha256Checksum"
+          fi
+
+          # Canonical version state is in WHMCS_VERSION.txt and PHP_VERSION.txt.
+          if [ ! -f "WHMCS_VERSION.txt" ]; then
+            echo "::error::WHMCS_VERSION.txt is missing; cannot determine current build version"
+            exit 1
+          fi
+          LAST_BUILT_VERSION=$(tr -d '[:space:]' < WHMCS_VERSION.txt)
           echo "last_built_version=${LAST_BUILT_VERSION}" >> $GITHUB_OUTPUT
           echo "Last built WHMCS version: ${LAST_BUILT_VERSION}"
+
+          if [ ! -f "PHP_VERSION.txt" ]; then
+            echo "::error::PHP_VERSION.txt is missing; cannot determine current PHP version"
+            exit 1
+          fi
+          PHP_VERSION=$(tr -d '[:space:]' < PHP_VERSION.txt)
+          echo "php_version=${PHP_VERSION}" >> $GITHUB_OUTPUT
+          echo "Current PHP version: ${PHP_VERSION}"
+
+          # Current minor is derived from the pinned WHMCS version, not git log.
+          CURRENT_MINOR=$(echo "${LAST_BUILT_VERSION}" | grep -oP '^\d+\.\d+')
+          if [ -z "${CURRENT_MINOR}" ]; then
+            echo "::error::Could not parse minor version from WHMCS_VERSION.txt (${LAST_BUILT_VERSION})"
+            exit 1
+          fi
+          echo "current_minor=${CURRENT_MINOR}" >> $GITHUB_OUTPUT
+          echo "Current minor version: ${CURRENT_MINOR}"
 
           # Extract latest minor version (e.g., 8.13 from 8.13.1)
           LATEST_MINOR=$(echo "${LATEST_WHMCS}" | grep -oP '^\d+\.\d+')
@@ -73,13 +108,54 @@ jobs:
           # Check if WHMCS version has actually updated
           if [ "${LATEST_WHMCS}" != "${LAST_BUILT_VERSION}" ]; then
             echo "version_updated=true" >> $GITHUB_OUTPUT
-            echo "should_build=true" >> $GITHUB_OUTPUT
             echo "WHMCS version updated from ${LAST_BUILT_VERSION} to ${LATEST_WHMCS}"
           else
             echo "version_updated=false" >> $GITHUB_OUTPUT
-            echo "should_build=false" >> $GITHUB_OUTPUT
-            echo "No WHMCS version change (${LATEST_WHMCS}), skipping build"
+            echo "No WHMCS version change (${LATEST_WHMCS})"
           fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - name: Resolve Base Image Digest
+        id: base_image
+        env:
+          BASE_IMAGE_TAG: lscr.io/linuxserver/baseimage-ubuntu:noble
+          VERSION_UPDATED: ${{ steps.version_check.outputs.version_updated }}
+        run: |
+          set -euo pipefail
+
+          digest=$(docker buildx imagetools inspect "${BASE_IMAGE_TAG}" | awk '/Digest:/ {print $2; exit}')
+          if [ -z "${digest}" ]; then
+            echo "::error::Failed to resolve digest for ${BASE_IMAGE_TAG}"
+            exit 1
+          fi
+
+          image_repo="${BASE_IMAGE_TAG%%:*}"
+          locked_digest=""
+          if [ -f BASE_IMAGE.lock ]; then
+            locked_digest="$(tr -d '[:space:]' < BASE_IMAGE.lock)"
+          fi
+
+          if [ "${digest}" != "${locked_digest}" ]; then
+            base_image_changed=true
+            echo "Base image digest changed from ${locked_digest:-<missing>} to ${digest}"
+          else
+            base_image_changed=false
+            echo "Base image digest unchanged: ${digest}"
+          fi
+
+          if [ "${VERSION_UPDATED}" = "true" ] || [ "${base_image_changed}" = "true" ]; then
+            should_build=true
+          else
+            should_build=false
+          fi
+
+          echo "base_image=${image_repo}@${digest}" >> "${GITHUB_OUTPUT}"
+          echo "base_image_digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "base_image_changed=${base_image_changed}" >> "${GITHUB_OUTPUT}"
+          echo "should_build=${should_build}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved base image: ${image_repo}@${digest}"
 
   create-version-issue:
     runs-on: ubuntu-24.04
@@ -87,53 +163,62 @@ jobs:
     if: needs.check-new-versions.outputs.new_minor_version != ''
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Get WHMCS changelog
         id: changelog
+        env:
+          VERSION: ${{ needs.check-new-versions.outputs.latest_version }}
+          MINOR: ${{ needs.check-new-versions.outputs.new_minor_version }}
+          CURRENT_MINOR: ${{ needs.check-new-versions.outputs.current_minor }}
+          PHP_VERSION: ${{ needs.check-new-versions.outputs.php_version }}
         run: |
-          VERSION="${{ needs.check-new-versions.outputs.latest_version }}"
-          MINOR="${{ needs.check-new-versions.outputs.new_minor_version }}"
+          set -euo pipefail
 
           # Fetch changelog from WHMCS (this might need adjustment based on actual API)
           CHANGELOG_URL="https://docs.whmcs.com/Changelog"
+          DETECTED_AT=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
-          # Create issue body
-          cat > issue_body.md << EOF
+          # Create issue body. All version inputs come from env vars instead of
+          # direct workflow expressions to avoid workflow-injection risk if an
+          # upstream value ever contains shell metacharacters.
+          cat > issue_body.md <<EOF
           ## New WHMCS Minor Version Available: ${MINOR}
 
           **Latest Version**: ${VERSION}
-          **Current Minor**: ${{ needs.check-new-versions.outputs.current_minor }}
+          **Current Minor**: ${CURRENT_MINOR}
           **New Minor**: ${MINOR}
 
           ### Action Required
-          - [ ] Create new branch: \`version/${MINOR}-php8.2\`
-          - [ ] Update docker-bake.hcl with new WHMCS version
+          - [ ] Create new branch: \`version/${MINOR}-php${PHP_VERSION}\`
+          - [ ] Update WHMCS_VERSION.txt / PHP_VERSION.txt with new versions
           - [ ] Test build with new version
           - [ ] Update README if needed
-          - [ ] Create release tag: \`v${VERSION}-v8.2\`
+          - [ ] Create release tag: \`v${VERSION}-v${PHP_VERSION}\`
 
           ### Release Information
           - **Changelog**: [WHMCS ${MINOR} Changelog](${CHANGELOG_URL})
           - **Download**: Available via WHMCS API
-          - **Detected**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - **Detected**: ${DETECTED_AT}
 
           ### Branch Creation Commands
           \`\`\`bash
-          git checkout -b version/${MINOR}-php8.2
-          # Update docker-bake.hcl WHMCS_RELEASE default
-          # Test build
-          git push -u origin version/${MINOR}-php8.2
+          git checkout -b version/${MINOR}-php${PHP_VERSION}
+          # Update WHMCS_VERSION.txt to ${VERSION}; update PHP_VERSION.txt if changing PHP
+          # Test build: scripts/build-local.sh image-local
+          git push -u origin version/${MINOR}-php${PHP_VERSION}
           \`\`\`
           EOF
 
       - name: Create GitHub Issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
+        env:
+          NEW_MINOR_VERSION: ${{ needs.check-new-versions.outputs.new_minor_version }}
         with:
           script: |
             const fs = require('fs');
             const issueBody = fs.readFileSync('issue_body.md', 'utf8');
-            const newVersion = '${{ needs.check-new-versions.outputs.new_minor_version }}';
+            const newVersion = process.env.NEW_MINOR_VERSION;
             const issueTitle = `[AUTO] New WHMCS Minor Version: ${newVersion}`;
 
             // Check for existing issues with the same version
@@ -180,27 +265,55 @@ jobs:
     runs-on: ubuntu-24.04
     needs: check-new-versions
     if: needs.check-new-versions.outputs.should_build == 'true'
+    outputs:
+      tag_name: ${{ steps.update.outputs.tag_name }}
+      release_commit: ${{ steps.update.outputs.release_commit }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
-      - name: Update version file and create tag
+      - name: Update version file
+        id: update
+        env:
+          BASE_IMAGE_CHANGED: ${{ needs.check-new-versions.outputs.base_image_changed }}
+          CURRENT_DIGEST: ${{ needs.check-new-versions.outputs.base_image_digest }}
+          LATEST_VERSION: ${{ needs.check-new-versions.outputs.latest_version }}
+          PHP_VERSION: ${{ needs.check-new-versions.outputs.php_version }}
         run: |
-          echo "${{ needs.check-new-versions.outputs.latest_version }}" > WHMCS_VERSION.txt
+          set -euo pipefail
+
+          TAG_NAME="v${LATEST_VERSION}-v${PHP_VERSION}"
+          echo "tag_name=${TAG_NAME}" >> "${GITHUB_OUTPUT}"
+
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add WHMCS_VERSION.txt
-          git commit -m "Update WHMCS version to ${{ needs.check-new-versions.outputs.latest_version }}"
+          git fetch origin "${GITHUB_REF_NAME}"
 
-          # Create git tag following the existing format: v{whmcs-version}-v{php-version}
-          PHP_VERSION="8.2"  # Current PHP version from docker-bake.hcl
-          TAG_NAME="v${{ needs.check-new-versions.outputs.latest_version }}-v${PHP_VERSION}"
-          git tag "${TAG_NAME}"
+          REMOTE_VERSION="$(git show "origin/${GITHUB_REF_NAME}:WHMCS_VERSION.txt" 2>/dev/null | tr -d '[:space:]' || echo '')"
+          REMOTE_DIGEST="$(git show "origin/${GITHUB_REF_NAME}:BASE_IMAGE.lock" 2>/dev/null | tr -d '[:space:]' || echo '')"
 
-          git push
-          git push origin "${TAG_NAME}"
+          if [ "${REMOTE_VERSION}" = "${LATEST_VERSION}" ] && [ "${REMOTE_DIGEST}" = "${CURRENT_DIGEST}" ]; then
+            echo "Remote already at target state; skipping commit"
+            release_commit="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
+          else
+            echo "${LATEST_VERSION}" > WHMCS_VERSION.txt
+            if [ "${BASE_IMAGE_CHANGED}" = "true" ]; then
+              echo "${CURRENT_DIGEST}" > BASE_IMAGE.lock
+            fi
+
+            if [ -z "$(git status --short -- WHMCS_VERSION.txt BASE_IMAGE.lock)" ]; then
+              echo "Version and base-image lock already at target state; skipping commit"
+            else
+              git add WHMCS_VERSION.txt BASE_IMAGE.lock
+              git commit -m "Update WHMCS version to ${LATEST_VERSION} [ci-skip]"
+              git push origin "HEAD:${GITHUB_REF_NAME}"
+            fi
+            release_commit="$(git rev-parse HEAD)"
+          fi
+
+          echo "release_commit=${release_commit}" >> "${GITHUB_OUTPUT}"
 
   build-with-updates:
     needs: [check-new-versions, update-version]
@@ -208,31 +321,66 @@ jobs:
     uses: ./.github/workflows/docker-build.yml
     with:
       whmcs_version: ${{ needs.check-new-versions.outputs.latest_version }}
+      php_version: ${{ needs.check-new-versions.outputs.php_version }}
+      whmcs_sha256: ${{ needs.check-new-versions.outputs.whmcs_sha256 }}
+      base_image: ${{ needs.check-new-versions.outputs.base_image }}
       push_enabled: true
       extra_tags: |
         type=raw,value=weekly-{{date 'YYYY-MM-DD'}}
         type=raw,value=latest-deps
+        type=raw,value=v${{ needs.check-new-versions.outputs.latest_version }}-v${{ needs.check-new-versions.outputs.php_version }}
       image_description: 'WHMCS Docker Image - Weekly Dependency Update'
     secrets: inherit
 
-  create-summary:
+  tag-release:
     runs-on: ubuntu-24.04
     needs: [check-new-versions, update-version, build-with-updates]
     if: needs.check-new-versions.outputs.should_build == 'true'
     steps:
-      - name: Create Release Summary
+      - name: Checkout Release Commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.update-version.outputs.release_commit }}
+
+      - name: Create and push release tag
+        env:
+          TAG_NAME: ${{ needs.update-version.outputs.tag_name }}
         run: |
-          echo "## Weekly Dependency Update Build" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Date**: $(date '+%Y-%m-%dT%H:%M:%S%:z')" >> $GITHUB_STEP_SUMMARY
-          echo "- **WHMCS Version**: ${{ needs.check-new-versions.outputs.latest_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Previous Version**: ${{
-            needs.check-new-versions.outputs.last_built_version
-          }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Current Branch**: main" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tags**: weekly-$(date '+%Y-%m-%d'), latest-deps" >> $GITHUB_STEP_SUMMARY
-          echo "- **Base Image**: Updated with latest security patches" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ needs.check-new-versions.outputs.new_minor_version }}" ]; then
-            echo "- **New Minor Version Available**: ${{
-              needs.check-new-versions.outputs.new_minor_version
-            }} (issue created)" >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          if git ls-remote --tags origin "${TAG_NAME}" | grep -q .; then
+            echo "Tag ${TAG_NAME} already exists on origin; skipping tag creation"
+          else
+            git tag "${TAG_NAME}"
+            git push origin "${TAG_NAME}"
+          fi
+
+  create-summary:
+    runs-on: ubuntu-24.04
+    needs: [check-new-versions, update-version, build-with-updates, tag-release]
+    if: needs.check-new-versions.outputs.should_build == 'true'
+    steps:
+      - name: Create Release Summary
+        env:
+          LATEST_VERSION: ${{ needs.check-new-versions.outputs.latest_version }}
+          LAST_BUILT_VERSION: ${{ needs.check-new-versions.outputs.last_built_version }}
+          NEW_MINOR_VERSION: ${{ needs.check-new-versions.outputs.new_minor_version }}
+          PHP_VERSION: ${{ needs.check-new-versions.outputs.php_version }}
+        run: |
+          set -euo pipefail
+
+          echo "## Weekly Dependency Update Build" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **Build Date**: $(date '+%Y-%m-%dT%H:%M:%S%:z')" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **WHMCS Version**: ${LATEST_VERSION}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **PHP Version**: ${PHP_VERSION}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **Previous Version**: ${LAST_BUILT_VERSION}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **Current Branch**: main" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **Tags**: weekly-$(date '+%Y-%m-%d'), latest-deps, v${LATEST_VERSION}-v${PHP_VERSION}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- **Base Image**: Updated with latest security patches" >> "${GITHUB_STEP_SUMMARY}"
+          if [ -n "${NEW_MINOR_VERSION}" ]; then
+            echo "- **New Minor Version Available**: ${NEW_MINOR_VERSION} (issue created)" >> "${GITHUB_STEP_SUMMARY}"
           fi

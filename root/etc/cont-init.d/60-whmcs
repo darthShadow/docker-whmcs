@@ -1,4 +1,5 @@
 #!/usr/bin/with-contenv bash
+set -euo pipefail
 
 echo "**** Create WHMCS Directories: /config/whmcs | /config/www/whmcs ****"
 mkdir -p /config/whmcs /config/www/whmcs && \
@@ -7,7 +8,7 @@ mkdir -p /config/whmcs /config/www/whmcs && \
 echo "**** Extracting WHMCS Release: /config/www/whmcs ****"
 if [ ! -f "/config/www/whmcs/index.php" ]; then
   unzip -q /whmcs/whmcs.zip -d /config/www/whmcs
-  chown -R abc:abc /config/www/whmcs
+  find /config/www/whmcs ! -user abc -exec chown abc:abc {} +
 fi
 
 echo "**** Setting WHMCS Configuration ****"
@@ -15,20 +16,25 @@ if [ ! -f "/config/whmcs/configuration.php" ] && [ -f "/config/www/whmcs/configu
   cp -v /config/www/whmcs/configuration.php.new /config/whmcs/configuration.php
 fi
 if [ -f "/config/whmcs/configuration.php" ]; then
-  cp -vf /config/whmcs/configuration.php /config/www/whmcs/configuration.php
+  # Use a symlink so in-app key rotation reaches the persistent copy immediately
+  # and survives unclean shutdowns. Migrate from any prior copy-back layout.
+  if [ ! -L "/config/www/whmcs/configuration.php" ] && [ -e "/config/www/whmcs/configuration.php" ]; then
+    rm -f /config/www/whmcs/configuration.php
+  fi
+  ln -svf /config/whmcs/configuration.php /config/www/whmcs/configuration.php
 fi
 
 echo "**** Setting Permissions: /config/whmcs ****"
 if [ -d "/config/whmcs" ]; then
   if [ "$(stat -c '%U' '/config/whmcs')" != "abc" ]; then
-    chown -R abc:abc /config/whmcs
+    find /config/whmcs ! -user abc -exec chown abc:abc {} +
   fi
 fi
 
 echo "**** Setting Permissions: /config/www/whmcs ****"
 if [ -d "/config/www/whmcs" ]; then
   if [ "$(stat -c '%U' '/config/www/whmcs')" != "abc" ]; then
-    chown -R abc:abc /config/www/whmcs
+    find /config/www/whmcs ! -user abc -exec chown abc:abc {} +
   fi
 fi
 
@@ -40,12 +46,12 @@ fi
 
 echo "**** Create WHMCS Storage Directories: /config/www/whmcs_storage/{whmcs_updater_tmp_dir,downloads,attachments/projects,templates_c} ****"
 mkdir -p /config/www/whmcs_storage/{whmcs_updater_tmp_dir,downloads,attachments/projects,templates_c} && \
-  chown abc:abc /config/www/whmcs_storage/{whmcs_updater_tmp_dir,downloads,attachments/projects,templates_c}
+  find /config/www/whmcs_storage ! -user abc -exec chown abc:abc {} +
 
 echo "**** Setting Storage Permissions: /config/www/whmcs_storage ****"
 if [ -d "/config/www/whmcs_storage" ]; then
   if [ "$(stat -c '%U' '/config/www/whmcs_storage')" != "abc" ]; then
-    chown -R abc:abc /config/www/whmcs_storage
+    find /config/www/whmcs_storage ! -user abc -exec chown abc:abc {} +
   fi
 fi
 

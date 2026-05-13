@@ -1,6 +1,11 @@
 #!/usr/bin/with-contenv bash
 
-echo "**** Backing Up WHMCS Configuration ****"
-if [ -s "/config/www/whmcs/configuration.php" ]; then
+# The init script symlinks /config/www/whmcs/configuration.php to the
+# persistent /config/whmcs/configuration.php, so app writes already land in
+# the persistent location. This finish-step copy-back is kept only as a
+# safety net for legacy /config volumes that pre-date the symlink: if the
+# in-app file is still a regular file (not a symlink), copy it back.
+if [ ! -L "/config/www/whmcs/configuration.php" ] && [ -s "/config/www/whmcs/configuration.php" ]; then
+  echo "**** Legacy layout detected; backing up WHMCS configuration ****"
   cp -vf /config/www/whmcs/configuration.php /config/whmcs/configuration.php
 fi

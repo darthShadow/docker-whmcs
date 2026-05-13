@@ -1,0 +1,22 @@
+---
+# Dependabot is configured but disabled by default. To enable, uncomment
+# the `version:` line and the appropriate `updates:` block(s) below.
+# Each entry can be re-enabled independently.
+
+# version: 2
+# updates:
+#   - package-ecosystem: github-actions
+#     directory: /
+#     target-branch: main
+#     schedule:
+#       interval: weekly
+#     labels:
+#       - dependencies
+#
+#   - package-ecosystem: docker
+#     directory: /
+#     target-branch: main
+#     schedule:
+#       interval: weekly
+#     labels:
+#       - dependencies
