@@ -18,8 +18,3 @@
 0       3                           */2     *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/domainsync.php 2>&1 | tee -a /config/cron/log/whmcs-domain-sync.log >/proc/1/fd/1
 
 0       9                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/autoproduct_upgrade/cron.php 2>&1 | tee -a /config/cron/log/whmcs-product-upgrade.log >/proc/1/fd/1
-
-# - RTR0 Scripts for Monitoring Stream Counts
-*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Plex/streamCleaner.php 2>&1 | tee -a /config/cron/log/rtr0-plex.log >/proc/1/fd/1
-*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Emby/streamCleaner.php 2>&1 | tee -a /config/cron/log/rtr0-emby.log >/proc/1/fd/1
-*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Jellyfin/streamCleaner.php 2>&1 | tee -a /config/cron/log/rtr0-jellyfin.log >/proc/1/fd/1

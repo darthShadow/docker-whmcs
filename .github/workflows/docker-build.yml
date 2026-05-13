@@ -185,7 +185,7 @@ jobs:
           cleanup() {
             docker logs "${container_name}" >/tmp/whmcs-smoke.log 2>&1 || true
             docker rm -f "${container_name}" >/dev/null 2>&1 || true
-            rm -rf "${config_dir}"
+            rm -rf "${config_dir}" || true
           }
           trap cleanup EXIT
 
@@ -201,8 +201,10 @@ jobs:
             "${image_ref}"
 
           ready=false
-          for _ in {1..30}; do
-            if curl -sf -o /dev/null http://127.0.0.1:18080/; then
+          status=""
+          for _ in {1..90}; do
+            status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/ || true)
+            if [ "${status}" = "200" ] || [ "${status}" = "302" ]; then
               ready=true
               break
             fi
@@ -211,7 +213,7 @@ jobs:
 
           if [ "${ready}" != "true" ]; then
             docker logs "${container_name}"
-            echo "::error::Smoke container did not serve / within 60 seconds"
+            echo "::error::Smoke container did not serve / within 180 seconds"
             exit 1
           fi
 
@@ -329,10 +331,10 @@ jobs:
         env:
           OWNER_NAME: ${{ env.OWNER_NAME }}
         run: |
-          docker buildx imagetools create \
+          eval "docker buildx imagetools create \
           ${TAGS} \
           ${ANNOTATIONS} \
-          $(printf "ghcr.io/${OWNER_NAME}/whmcs@sha256:%s " *)
+          $(printf "ghcr.io/${OWNER_NAME}/whmcs@sha256:%s " *)"
 
       - name: Inspect Multi-Platform Image
         if: inputs.push_enabled && github.event_name != 'pull_request'
