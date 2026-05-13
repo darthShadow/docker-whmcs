@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.4
-FROM lscr.io/linuxserver/baseimage-ubuntu:noble
+ARG BASE_IMAGE=lscr.io/linuxserver/baseimage-ubuntu:noble
+FROM ${BASE_IMAGE}
 
 ARG BUILD_DATE
 
@@ -8,6 +9,16 @@ ARG TARGETARCH
 ARG PHP_RELEASE
 # 8.13.1
 ARG WHMCS_RELEASE
+
+ARG WHMCS_SHA256=""
+
+# Optional SHA256 pins for the loader zips. Empty = skip verification (the
+# build still validates the archive extracted the expected file). Provide a
+# value to fail the build on tamper / corruption / unexpected upstream change.
+ARG SOURCEGUARDIAN_SHA256_AMD64=""
+ARG SOURCEGUARDIAN_SHA256_ARM64=""
+ARG IONCUBE_SHA256_AMD64=""
+ARG IONCUBE_SHA256_ARM64=""
 
 LABEL build_date="Date:- ${BUILD_DATE}"
 LABEL build_version="Version:- WHMCS ${WHMCS_RELEASE:+v}${WHMCS_RELEASE:-latest} on PHP v${PHP_RELEASE}"
@@ -21,6 +32,8 @@ ENV AUTH_USER="" AUTH_PASS=""
 
 ENV WHMCS_SERVER_IP="\$server_addr" WHMCS_SERVER_URL="_"
 
+ENV WHMCS_ADMIN_PATH="admin"
+
 ENV DEBIAN_FRONTEND="noninteractive"
 
 # Install nginx and PHP
@@ -31,10 +44,9 @@ RUN echo "**** Install Dependencies ****" && \
         ca-certificates \
         cron \
         curl \
-        htop \
+        gettext-base \
         jq \
         less \
-        net-tools \
         openssl \
         software-properties-common \
         unrar \
@@ -73,7 +85,6 @@ RUN echo "**** Install Dependencies ****" && \
         php${PHP_VERSION}-imap \
         php${PHP_VERSION}-intl \
         php${PHP_VERSION}-xml \
-        php${PHP_VERSION}-xmlrpc \
         php${PHP_VERSION}-zip \
         php${PHP_VERSION}-bz2 \
         php${PHP_VERSION}-mbstring \
@@ -105,40 +116,85 @@ RUN echo "**** Setting Up php & php-fpm ****" && \
         mv -vf /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf /etc/php/${PHP_VERSION}/fpm/pool.d/00-www.conf; \
     fi
 
-# Configure production php.ini for CLI
-# * Max execution time = 1800 seconds
-# * Set the timezone = ${TZ}
-RUN sed -r -i \
-    -e "s@^;date\.timezone\s+.*@date\.timezone=${TZ}@" \
-    -e "s/(max_execution_time =) ([0-9]+)/\1 1800/" \
-    /etc/php/${PHP_VERSION}/cli/php.ini
+# Configure WHMCS PHP runtime defaults for both FPM and CLI.
+RUN echo "**** Setting WHMCS PHP runtime defaults ****" && \
+    printf "date.timezone = %s\nmax_execution_time = 600\nmax_input_time = 600\n" "${TZ}" \
+        > /etc/php/${PHP_VERSION}/mods-available/00-whmcs.ini && \
+    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-whmcs.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-whmcs.ini && \
+    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-whmcs.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-whmcs.ini && \
+    printf "max_execution_time = 1800\n" \
+        > /etc/php/${PHP_VERSION}/cli/conf.d/99-whmcs-cli.ini
 
 # Setup SourceGuardian for PHP
-RUN case ${TARGETARCH} in \
-         "amd64")  SOURCEGUARDIAN_ARCH="x86_64"  ;; \
-         "arm64")  SOURCEGUARDIAN_ARCH="aarch64" ;; \
-    esac && \
-    echo "**** Installing SourceGuardian for PHP: Architecture: ${SOURCEGUARDIAN_ARCH} ****" && \
-    mkdir /tmp/sourceguardian && cd /tmp/sourceguardian && \
-    curl --user-agent "Mozilla" -o sourceguardian.zip https://www.sourceguardian.com/loaders/download/loaders.linux-${SOURCEGUARDIAN_ARCH}.zip && \
-    unzip -q sourceguardian.zip && mkdir -p /usr/lib/php/sourceguardian && cp -vf ixed.${PHP_VERSION}.lin /usr/lib/php/sourceguardian/ && \
-    echo "zend_extension=/usr/lib/php/sourceguardian/ixed.${PHP_VERSION}.lin" > /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini && \
-    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-sourceguardian.ini && \
-    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-sourceguardian.ini && \
+RUN set -eu; \
+    case ${TARGETARCH} in \
+         "amd64")  SOURCEGUARDIAN_ARCH="x86_64";  EXPECTED_SHA256="${SOURCEGUARDIAN_SHA256_AMD64}" ;; \
+         "arm64")  SOURCEGUARDIAN_ARCH="aarch64"; EXPECTED_SHA256="${SOURCEGUARDIAN_SHA256_ARM64}" ;; \
+         *)        echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    echo "**** Installing SourceGuardian for PHP: Architecture: ${SOURCEGUARDIAN_ARCH} ****"; \
+    mkdir /tmp/sourceguardian && cd /tmp/sourceguardian; \
+    curl --user-agent "Mozilla" --fail --location --silent --show-error \
+         --retry 5 --retry-delay 5 --retry-connrefused \
+         -o sourceguardian.zip \
+         "https://www.sourceguardian.com/loaders/download/loaders.linux-${SOURCEGUARDIAN_ARCH}.zip"; \
+    ACTUAL_SHA256=$(sha256sum sourceguardian.zip | awk '{print $1}'); \
+    echo "SHA256: sourceguardian.linux-${SOURCEGUARDIAN_ARCH}.zip = ${ACTUAL_SHA256}"; \
+    if [ -n "${EXPECTED_SHA256}" ]; then \
+        if [ "${EXPECTED_SHA256}" != "${ACTUAL_SHA256}" ]; then \
+            echo "SourceGuardian SHA256 mismatch: expected ${EXPECTED_SHA256}, got ${ACTUAL_SHA256}" >&2; \
+            exit 1; \
+        fi; \
+        echo "SourceGuardian SHA256 verified."; \
+    else \
+        echo "SourceGuardian SHA256 pin not set; skipping verification."; \
+    fi; \
+    unzip -q sourceguardian.zip; \
+    if [ ! -s "ixed.${PHP_VERSION}.lin" ]; then \
+        echo "SourceGuardian: ixed.${PHP_VERSION}.lin missing or empty after extract" >&2; \
+        exit 1; \
+    fi; \
+    mkdir -p /usr/lib/php/sourceguardian; \
+    cp -vf ixed.${PHP_VERSION}.lin /usr/lib/php/sourceguardian/; \
+    echo "zend_extension=/usr/lib/php/sourceguardian/ixed.${PHP_VERSION}.lin" > /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini; \
+    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-sourceguardian.ini; \
+    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-sourceguardian.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-sourceguardian.ini; \
     rm -rf /tmp/sourceguardian
 
 # Setup ionCube for PHP
-RUN case ${TARGETARCH} in \
-         "amd64")  IONCUBE_ARCH="x86-64"  ;; \
-         "arm64")  IONCUBE_ARCH="aarch64" ;; \
-    esac && \
-    echo "**** Installing ionCube for PHP: Architecture: ${IONCUBE_ARCH} ****" && \
-    mkdir /tmp/ioncube && cd /tmp/ioncube && \
-    curl --user-agent "Mozilla" -o ioncube.zip https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_${IONCUBE_ARCH}.zip && \
-    unzip -q ioncube.zip && mkdir -p /usr/lib/php/ioncube && cp -vf ioncube/ioncube_loader_lin_${PHP_VERSION}.so /usr/lib/php/ioncube/ && \
-    echo "zend_extension = /usr/lib/php/ioncube/ioncube_loader_lin_${PHP_VERSION}.so" > /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini && \
-    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-ioncube.ini && \
-    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-ioncube.ini && \
+RUN set -eu; \
+    case ${TARGETARCH} in \
+         "amd64")  IONCUBE_ARCH="x86-64";  EXPECTED_SHA256="${IONCUBE_SHA256_AMD64}" ;; \
+         "arm64")  IONCUBE_ARCH="aarch64"; EXPECTED_SHA256="${IONCUBE_SHA256_ARM64}" ;; \
+         *)        echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    echo "**** Installing ionCube for PHP: Architecture: ${IONCUBE_ARCH} ****"; \
+    mkdir /tmp/ioncube && cd /tmp/ioncube; \
+    curl --user-agent "Mozilla" --fail --location --silent --show-error \
+         --retry 5 --retry-delay 5 --retry-connrefused \
+         -o ioncube.zip \
+         "https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_${IONCUBE_ARCH}.zip"; \
+    ACTUAL_SHA256=$(sha256sum ioncube.zip | awk '{print $1}'); \
+    echo "SHA256: ioncube_loaders_lin_${IONCUBE_ARCH}.zip = ${ACTUAL_SHA256}"; \
+    if [ -n "${EXPECTED_SHA256}" ]; then \
+        if [ "${EXPECTED_SHA256}" != "${ACTUAL_SHA256}" ]; then \
+            echo "ionCube SHA256 mismatch: expected ${EXPECTED_SHA256}, got ${ACTUAL_SHA256}" >&2; \
+            exit 1; \
+        fi; \
+        echo "ionCube SHA256 verified."; \
+    else \
+        echo "ionCube SHA256 pin not set; skipping verification."; \
+    fi; \
+    unzip -q ioncube.zip; \
+    if [ ! -s "ioncube/ioncube_loader_lin_${PHP_VERSION}.so" ]; then \
+        echo "ionCube: ioncube_loader_lin_${PHP_VERSION}.so missing or empty after extract" >&2; \
+        exit 1; \
+    fi; \
+    mkdir -p /usr/lib/php/ioncube; \
+    cp -vf ioncube/ioncube_loader_lin_${PHP_VERSION}.so /usr/lib/php/ioncube/; \
+    echo "zend_extension = /usr/lib/php/ioncube/ioncube_loader_lin_${PHP_VERSION}.so" > /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini; \
+    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/fpm/conf.d/00-ioncube.ini; \
+    ln -sf /etc/php/${PHP_VERSION}/mods-available/00-ioncube.ini /etc/php/${PHP_VERSION}/cli/conf.d/00-ioncube.ini; \
     rm -rf /tmp/ioncube
 
 # Setup nginx
@@ -152,13 +208,23 @@ RUN echo "**** Setting Up nginx ****" && \
 # Setup WHMCS
 RUN echo "**** Setting WHMCS Release Version ****" && \
     if [ "x${WHMCS_RELEASE}" = "x" ]; then \
-        WHMCS_RELEASE=$(curl -sX GET 'https://api1.whmcs.com/download/latest?type=stable' \
-        | jq -r '.version'); \
+        echo "WHMCS_RELEASE not set" >&2; \
+        exit 1; \
     fi && \
     echo "**** Downloading WHMCS Release: ${WHMCS_RELEASE} ****" && \
     mkdir -p /whmcs && \
-    curl --user-agent "Mozilla" -o /whmcs/whmcs.zip -L \
-        https://releases.whmcs.com/v2/pkgs/whmcs-${WHMCS_RELEASE}-release.1.zip
+    curl --user-agent "Mozilla" --fail --location --silent --show-error \
+        --retry 5 --retry-delay 5 --retry-connrefused \
+        -o /whmcs/whmcs.zip \
+        https://releases.whmcs.com/v2/pkgs/whmcs-${WHMCS_RELEASE}-release.1.zip && \
+    ACTUAL_SHA256=$(sha256sum /whmcs/whmcs.zip | awk '{print $1}') && \
+    echo "SHA256: whmcs-${WHMCS_RELEASE}-release.1.zip = ${ACTUAL_SHA256}" && \
+    if [ -n "${WHMCS_SHA256}" ]; then \
+        echo "${WHMCS_SHA256}  /whmcs/whmcs.zip" | sha256sum -c -; \
+        echo "WHMCS SHA256 verified."; \
+    else \
+        echo "WARNING: WHMCS_SHA256 not set; skipping WHMCS zip verification." >&2; \
+    fi
 
 COPY root/ /
 
@@ -168,3 +234,5 @@ COPY root/ /
 VOLUME /config
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD curl -fsSL -o /dev/null http://127.0.0.1/ || exit 1

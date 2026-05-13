@@ -16,15 +16,56 @@ permissions:
 'on':
   push:
     branches:
-      - '*'
+      - main
+      - develop
+      - 'version/**'
     tags:
       - '*'
 
 jobs:
+  prep:
+    runs-on: ubuntu-24.04
+    outputs:
+      whmcs_version: ${{ steps.versions.outputs.whmcs_version }}
+      php_version: ${{ steps.versions.outputs.php_version }}
+      whmcs_sha256: ${{ steps.versions.outputs.whmcs_sha256 }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Read Build Versions
+        id: versions
+        env:
+          WHMCS_API_URL: https://api1.whmcs.com/download/latest?type=stable
+        run: |
+          set -euo pipefail
+
+          WHMCS_VERSION=$(tr -d '[:space:]' < WHMCS_VERSION.txt)
+          PHP_VERSION=$(tr -d '[:space:]' < PHP_VERSION.txt)
+
+          api_response=$(curl -fsSL "${WHMCS_API_URL}")
+          api_version=$(jq -r '.version // empty' <<< "${api_response}")
+          api_sha256=$(jq -r '.sha256Checksum // empty' <<< "${api_response}")
+
+          echo "whmcs_version=${WHMCS_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "php_version=${PHP_VERSION}" >> "${GITHUB_OUTPUT}"
+
+          if [ "${api_version}" = "${WHMCS_VERSION}" ] && [ -n "${api_sha256}" ]; then
+            echo "whmcs_sha256=${api_sha256}" >> "${GITHUB_OUTPUT}"
+            echo "WHMCS SHA256 verification enabled for ${WHMCS_VERSION}"
+          else
+            echo "whmcs_sha256=" >> "${GITHUB_OUTPUT}"
+            echo "WHMCS SHA256 verification skipped; API version ${api_version:-unknown} does not match pinned ${WHMCS_VERSION}"
+          fi
+
   build:
-    if: "!contains(github.event.head_commit.message, '[ci-skip]')"
+    needs: prep
+    if: ${{ !contains(github.event.head_commit.message || '', '[ci-skip]') }}
     uses: ./.github/workflows/docker-build.yml
     with:
+      whmcs_version: ${{ needs.prep.outputs.whmcs_version }}
+      php_version: ${{ needs.prep.outputs.php_version }}
+      whmcs_sha256: ${{ needs.prep.outputs.whmcs_sha256 }}
       push_enabled: true
       image_description: 'WHMCS Docker Image'
     secrets: inherit

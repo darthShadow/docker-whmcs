@@ -14,9 +14,6 @@ permissions:
   packages: write
 
 'on':
-  schedule:
-    # Run weekly on Sundays at 3:00 AM UTC (after dependency updates)
-    - cron: '0 3 * * 0'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -39,20 +36,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clean up untagged images
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const packageName = 'whmcs';
-            const dryRun = '${{ github.event.inputs.dry_run }}' === 'true';
+            const dryRun = '${{ github.event.inputs.dry_run }}' !== 'false';
             const retentionMonths = parseInt('${{ github.event.inputs.retention_months }}' || '3');
             const cutoffDate = new Date();
             cutoffDate.setMonth(cutoffDate.getMonth() - retentionMonths);

@@ -1,20 +1,33 @@
 #!/usr/bin/with-contenv bash
+set -euo pipefail
+
+source /etc/whmcs-helpers.sh
+
+# PHP session cleanup depends on the cron job shipped by the php-common
+# package (/etc/cron.d/php*, runs /usr/lib/php/sessionclean). PHP's own
+# per-request GC is disabled in /defaults/php/90-default.ini, so if the
+# cron job is missing or the cron service is stopped, /var/lib/php/sessions
+# will accumulate until the container restarts.
+if ls /etc/cron.d/php* >/dev/null 2>&1; then
+  echo "**** PHP session cleanup cron present: $(ls /etc/cron.d/php* | tr '\n' ' ')****"
+else
+  echo "**** WARNING: no /etc/cron.d/php* found; PHP sessions will not be cleaned automatically ****" >&2
+fi
 
 mkdir -p /config/crontabs && \
-  chown abc:abc -R /config/crontabs
+  find /config/crontabs ! -user abc -exec chown abc:abc {} +
 
 echo "**** Create default whmcs crontab: /config/crontabs/whmcs ****"
-if [ ! -f "/config/crontabs/whmcs" ]; then
-  cp -vf /defaults/cron/whmcs /config/crontabs/whmcs
-  chown abc:abc /config/crontabs/whmcs
-fi
+seed_default /defaults/cron/whmcs /config/crontabs/whmcs
+find /config/crontabs ! -user abc -exec chown abc:abc {} +
 
 echo "**** Set whmcs crontab: /config/crontabs/whmcs - /etc/cron.d/whmcs ****"
 cp -vf /config/crontabs/whmcs /etc/cron.d/whmcs
 
 # Set custom cronjob(s)
-[ -f /config/crontabs/root ] && \
+if [ -f /config/crontabs/root ]; then
   crontab -u root /config/crontabs/root
+fi
 
 mkdir -p /config/cron/log && \
-  chown abc:abc -R /config/cron/log
+  find /config/cron/log ! -user abc -exec chown abc:abc {} +

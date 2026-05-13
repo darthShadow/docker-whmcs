@@ -4,23 +4,22 @@
 #
 
 # - Run Cron Tasks except Ticket Escalations and Auto Suspensions - Every 5 Minutes
-*/5     *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/cron.php skip --TicketEscalations --AutoSuspensions > /config/cron/log/whmcs-maintenance.log 2>&1
+*/5     *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/cron.php skip --TicketEscalations --AutoSuspensions 2>&1 | tee -a /config/cron/log/whmcs-maintenance.log >/proc/1/fd/1
 
 # - Process Ticket Escalations - Monday-Friday from 9 AM - 16 PM (Business Hours)
-0       9,10,11,12,13,14,15,16      *       *       1-5     root    s6-setuidgid abc php -q /var/www/whmcs/crons/cron.php do --TicketEscalations > /config/cron/log/whmcs-ticket-escalations.log 2>&1
+0       9,10,11,12,13,14,15,16      *       *       1-5     root    s6-setuidgid abc php -q /var/www/whmcs/crons/cron.php do --TicketEscalations 2>&1 | tee -a /config/cron/log/whmcs-ticket-escalations.log >/proc/1/fd/1
 
 # - Auto Suspension - Monday-Friday @ 9 AM (Start of Business)
-0       9                           *       *       1-5     root    s6-setuidgid abc php -q /var/www/whmcs/crons/cron.php do --AutoSuspensions > /config/cron/log/whmcs-auto-suspension.log 2>&1
+0       9                           *       *       1-5     root    s6-setuidgid abc php -q /var/www/whmcs/crons/cron.php do --AutoSuspensions 2>&1 | tee -a /config/cron/log/whmcs-auto-suspension.log >/proc/1/fd/1
 
 # - Ticket Importing using POP3 Import - Every 5 Minutes
-*/5     *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/pop.php > /config/cron/log/whmcs-pop.log 2>&1
+*/5     *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/pop.php 2>&1 | tee -a /config/cron/log/whmcs-pop.log >/proc/1/fd/1
 
-0       3                           */2     *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/domainsync.php > /config/cron/log/whmcs-domain-sync.log 2>&1
+0       3                           */2     *       *       root    s6-setuidgid abc php -q /var/www/whmcs/crons/domainsync.php 2>&1 | tee -a /config/cron/log/whmcs-domain-sync.log >/proc/1/fd/1
 
-0       9                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/autoproduct_upgrade/cron.php > /config/cron/log/whmcs-product-upgrade.log 2>&1
+0       9                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/autoproduct_upgrade/cron.php 2>&1 | tee -a /config/cron/log/whmcs-product-upgrade.log >/proc/1/fd/1
 
 # - RTR0 Scripts for Monitoring Stream Counts
-*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Plex/streamCleaner.php > /config/cron/log/rtr0-plex.log 2>&1
-*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Emby/streamCleaner.php > /config/cron/log/rtr0-emby.log 2>&1
-*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Jellyfin/streamCleaner.php > /config/cron/log/rtr0-jellyfin.log 2>&1
-
+*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Plex/streamCleaner.php 2>&1 | tee -a /config/cron/log/rtr0-plex.log >/proc/1/fd/1
+*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Emby/streamCleaner.php 2>&1 | tee -a /config/cron/log/rtr0-emby.log >/proc/1/fd/1
+*       *                           *       *       *       root    s6-setuidgid abc php -q /var/www/whmcs/modules/addons/rtr0Jellyfin/streamCleaner.php 2>&1 | tee -a /config/cron/log/rtr0-jellyfin.log >/proc/1/fd/1
