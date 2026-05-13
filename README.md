@@ -8,7 +8,7 @@ SourceGuardian, and ionCube on top of `lscr.io/linuxserver/baseimage-ubuntu:nobl
 
 ## Features
 
-* PHP `8.2` runtime (see [PHP_VERSION.txt](PHP_VERSION.txt))
+* PHP `8.3` runtime (see [PHP_VERSION.txt](PHP_VERSION.txt))
 * ionCube and SourceGuardian loaders preinstalled
 * Nginx server configuration tailored for WHMCS
 * WHMCS cron preinstalled
@@ -143,7 +143,7 @@ a 60-second start period.
 | `latest` | Build of `main` on every push and on every weekly run |
 | `latest-deps` | Alias for the most recent weekly dependency-update build |
 | `weekly-YYYY-MM-DD` | Specific weekly build (kept indefinitely) |
-| `v<whmcs>-v<php>` | Pinned WHMCS+PHP combination, e.g. `v8.13.1-v8.2`; weekly builds apply this tag directly |
+| `v<whmcs>-v<php>` | Pinned WHMCS+PHP combination, e.g. `v9.0.4-v8.3`; weekly builds apply this tag directly |
 
 Branch layout:
 
@@ -209,7 +209,7 @@ To upgrade WHMCS itself when a new image ships a newer version, choose one of:
 ### Major version / PHP upgrade
 
 Pin to the matching `version/<whmcs-major>.x-php<php>` branch tag, e.g.
-`ghcr.io/darthshadow/whmcs:v8.13.1-v8.2`, before crossing a major version.
+`ghcr.io/darthshadow/whmcs:v9.0.4-v8.3`, before crossing a major version.
 
 ---
 
@@ -220,8 +220,8 @@ Pin to the matching `version/<whmcs-major>.x-php<php>` branch tag, e.g.
 scripts/build-local.sh image-local
 
 # Pin a specific WHMCS/PHP combo
-docker buildx bake --set image.args.WHMCS_RELEASE=8.13.2 \
-                   --set image.args.PHP_RELEASE=8.2 image-local
+docker buildx bake --set image.args.WHMCS_RELEASE=9.0.4 \
+                   --set image.args.PHP_RELEASE=8.3 image-local
 
 # Verify the loader downloads against known-good SHA256s (optional)
 docker buildx bake \
