@@ -56,8 +56,13 @@ RUN echo "**** Install Dependencies ****" && \
         zip && \
     echo "**** Add PPA: ondrej/php ****" && \
     add-apt-repository -y "ppa:ondrej/php" && \
-    echo "**** Add PPA: ondrej/nginx ****" && \
-    add-apt-repository -y "ppa:ondrej/nginx" && \
+    echo "**** Add nginx.org APT repo (stable) ****" && \
+    curl -fsSL --retry 3 --retry-delay 5 https://nginx.org/keys/nginx_signing.key \
+        -o /usr/share/keyrings/nginx-archive-keyring.asc && \
+    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.asc] http://nginx.org/packages/ubuntu noble nginx" \
+        > /etc/apt/sources.list.d/nginx.list && \
+    printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" \
+        > /etc/apt/preferences.d/99nginx && \
     echo "**** Update Repositories ****" && \
     apt-get -y update && \
     echo "**** Upgrade Packages ****" && \
@@ -203,6 +208,7 @@ RUN echo "**** Setting Up nginx ****" && \
     chown -R abc:abc /var/www && \
     ln -svf /dev/stdout /var/log/nginx/access.log && \
     ln -svf /dev/stderr /var/log/nginx/error.log && \
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/modules-enabled && \
     rm -vf /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*
 
 # Setup WHMCS
