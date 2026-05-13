@@ -28,7 +28,7 @@ variable "PHP_RELEASE" {
 # Canonical WHMCS version lives in WHMCS_VERSION.txt; the workflow reads it
 # and passes it as a build arg. Local builds must set this explicitly.
 variable "WHMCS_RELEASE" {
-    default = "8.13.1"
+    default = "8.13.3"
 }
 
 variable "WHMCS_SHA256" {
