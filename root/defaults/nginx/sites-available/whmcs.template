@@ -11,7 +11,7 @@ server {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
-    location ~ [^/]\.php(/|$) {
+    location ~ [^/]\.php(?:/|$) {
         include /etc/nginx/conf.d/php;
     }
 
@@ -61,7 +61,7 @@ server {
         deny all;
     }
 
-    location ~* /(configuration\.php(\..*)?|.+\.(bak|old|orig|swp)|.+~|\.sw[a-p])$ {
+    location ~* /(?:configuration\.php(?:\..*)?|.+\.(?:bak|old|orig|swp)|.+~|\.sw[a-p])$ {
         deny all;
         access_log off;
         log_not_found off;
@@ -95,86 +95,88 @@ server {
     }
 
     # Friendly URL(s) for WHMCS: https://hostup.org/blog/whmcs-friendly-urls-configuration-for-nginx/
+    # Named captures (?<rwpath>...) avoid CVE-2026-42945 (nginx-rift): unnamed
+    # rewrite captures combined with `?` in the replacement mis-size the buffer.
 
-    location ~ /announcements/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/announcements/$1;
+    location ~ /announcements/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/announcements/$rwpath;
     }
 
-    location ~ /download/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/download$1;
+    location ~ /download/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/download$rwpath;
     }
 
-    location ~ /knowledgebase/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/knowledgebase/$1;
+    location ~ /knowledgebase/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/knowledgebase/$rwpath;
     }
 
-    location ~ /store/ssl-certificates/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/store/ssl-certificates/$1;
+    location ~ /store/ssl-certificates/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/store/ssl-certificates/$rwpath;
     }
 
-    location ~ /store/sitelock/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/store/sitelock/$1;
+    location ~ /store/sitelock/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/store/sitelock/$rwpath;
     }
 
-    location ~ /store/website-builder/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/store/website-builder/$1;
+    location ~ /store/website-builder/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/store/website-builder/$rwpath;
     }
 
-    location ~ /store/order/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/store/order/$1;
+    location ~ /store/order/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/store/order/$rwpath;
     }
 
-    location ~ /cart/domain/renew/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/cart/domain/renew$1;
+    location ~ /cart/domain/renew/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/cart/domain/renew$rwpath;
     }
 
-    location ~ /account/paymentmethods/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/account/paymentmethods$1;
+    location ~ /account/paymentmethods/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/account/paymentmethods$rwpath;
     }
 
-    location ~ /password/reset/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/password/reset/$1;
+    location ~ /password/reset/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/password/reset/$rwpath;
     }
 
-    location ~ /account/security/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/account/security$1;
+    location ~ /account/security/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/account/security$rwpath;
     }
 
-    location ~ /subscription?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=/subscription$1;
+    location ~ /subscription?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=/subscription$rwpath;
     }
 
     # Social Media Authorization
-    location ~ /auth/provider/google_signin/finalize/?(.*)$ {
-        rewrite ^/(.*)$ /index.php?rp=auth/provider/google_signin/finalize$1;
+    location ~ /auth/provider/google_signin/finalize/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /index.php?rp=auth/provider/google_signin/finalize$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/(addons|apps|search|domains|help\/license|billing|logs|services|setup|user|utilities\/system\/php-compat)(.*) {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/$1$2 last;
+    location ~ /${WHMCS_ADMIN_PATH}/(?<adm_route>addons|apps|search|domains|help\/license|billing|logs|services|setup|user|utilities\/system\/php-compat)(?<adm_rest>.*) {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/${rwpath}${adm_rest} last;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/client/?(.*)/paymethods/?(.*)$ {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/paymethods/$1;
+    location ~ /${WHMCS_ADMIN_PATH}/client/?(?:.*)/paymethods/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/paymethods/$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/setup/auth/?(.*)$ {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/setup/auth/$1;
+    location ~ /${WHMCS_ADMIN_PATH}/setup/auth/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/setup/auth/$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/client/?(.*)/tickets/?(.*)$ {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/tickets/$1;
+    location ~ /${WHMCS_ADMIN_PATH}/client/?(?:.*)/tickets/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/tickets/$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/client/?(.*)/invoice/?(.*)/capture/?(.*)$ {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/invoice/?(.*)/capture/$1;
+    location ~ /${WHMCS_ADMIN_PATH}/client/?(?:.*)/invoice/?(?:.*)/capture/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/client/?(.*)/invoice/?(.*)/capture/$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/account/security/two-factor/?(.*)$ {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/account/security/two-factor/$1;
+    location ~ /${WHMCS_ADMIN_PATH}/account/security/two-factor/?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/account/security/two-factor/$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/search/intellisearch?(.*)$ {
-        rewrite ^/(.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/search/intellisearch/$1;
+    location ~ /${WHMCS_ADMIN_PATH}/search/intellisearch?(?:.*)$ {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/search/intellisearch/$rwpath;
     }
 
 }
