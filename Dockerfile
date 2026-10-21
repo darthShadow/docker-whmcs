@@ -20,6 +20,11 @@ ARG SOURCEGUARDIAN_SHA256_ARM64=""
 ARG IONCUBE_SHA256_AMD64=""
 ARG IONCUBE_SHA256_ARM64=""
 
+# SHA256 of https://packages.sury.org/debsuryorg-archive-keyring.deb, which
+# installs the signing key for the packages.sury.org PHP repo. The build fails
+# when the upstream file changes (for example on a key rotation).
+ARG SURY_KEYRING_SHA256="7511384559c9ddf1d5ce5f60be429ae9d4e7d01d9480d6f1b7a30c0810cf8b60"
+
 LABEL build_date="Date:- ${BUILD_DATE}"
 LABEL build_version="Version:- WHMCS ${WHMCS_RELEASE:+v}${WHMCS_RELEASE:-latest} on PHP v${PHP_RELEASE}"
 LABEL maintainer="darthShadow"
@@ -36,9 +41,15 @@ ENV WHMCS_ADMIN_PATH="admin"
 
 ENV DEBIAN_FRONTEND="noninteractive"
 
+# amd64 takes PHP from packages.sury.org. arm64 takes it from the ondrej/php
+# Launchpad PPA, which publishes arm64 security builds sooner. The PPA signing
+# key is committed in keyrings/ (fingerprint
+# B8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6).
+COPY --chmod=0644 keyrings/launchpad-ondrej-php.asc /usr/share/keyrings/launchpad-ondrej-php.asc
+
 # Install nginx and PHP
 RUN echo "**** Install Dependencies ****" && \
-    apt-get -y update && \
+    apt-get -y update --error-on=any && \
     apt-get -y install --no-install-recommends \
         apt-transport-https \
         ca-certificates \
@@ -48,14 +59,22 @@ RUN echo "**** Install Dependencies ****" && \
         jq \
         less \
         openssl \
-        software-properties-common \
         unrar \
         unzip \
         vim \
         wget \
         zip && \
-    echo "**** Add PPA: ondrej/php ****" && \
-    add-apt-repository -y "ppa:ondrej/php" && \
+    echo "**** Add PHP APT repos (amd64: packages.sury.org, arm64: Launchpad PPA) ****" && \
+    curl -fsSL --retry 3 --retry-delay 5 https://packages.sury.org/debsuryorg-archive-keyring.deb \
+        -o /tmp/debsuryorg-archive-keyring.deb && \
+    echo "${SURY_KEYRING_SHA256}  /tmp/debsuryorg-archive-keyring.deb" | sha256sum -c - && \
+    dpkg -i /tmp/debsuryorg-archive-keyring.deb && \
+    rm -f /etc/apt/trusted.gpg.d/debsuryorg-archive.gpg && \
+    case ${TARGETARCH} in \
+         "amd64")  echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ noble main" ;; \
+         "arm64")  echo "deb [signed-by=/usr/share/keyrings/launchpad-ondrej-php.asc] https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble main" ;; \
+         *)        echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac > /etc/apt/sources.list.d/php.list && \
     echo "**** Add nginx.org APT repo (stable) ****" && \
     curl -fsSL --retry 3 --retry-delay 5 https://nginx.org/keys/nginx_signing.key \
         -o /usr/share/keyrings/nginx-archive-keyring.asc && \
@@ -64,7 +83,7 @@ RUN echo "**** Install Dependencies ****" && \
     printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" \
         > /etc/apt/preferences.d/99nginx && \
     echo "**** Update Repositories ****" && \
-    apt-get -y update && \
+    apt-get -y update --error-on=any && \
     echo "**** Upgrade Packages ****" && \
     apt-get -y upgrade && \
     echo "**** Install Nginx Packages ****" && \
@@ -226,7 +245,7 @@ RUN echo "**** Setting WHMCS Release Version ****" && \
     ACTUAL_SHA256=$(sha256sum /whmcs/whmcs.zip | awk '{print $1}') && \
     echo "SHA256: whmcs-${WHMCS_RELEASE}-release.1.zip = ${ACTUAL_SHA256}" && \
     if [ -n "${WHMCS_SHA256}" ]; then \
-        echo "${WHMCS_SHA256}  /whmcs/whmcs.zip" | sha256sum -c -; \
+        echo "${WHMCS_SHA256}  /whmcs/whmcs.zip" | sha256sum -c - && \
         echo "WHMCS SHA256 verified."; \
     else \
         echo "WARNING: WHMCS_SHA256 not set; skipping WHMCS zip verification." >&2; \
