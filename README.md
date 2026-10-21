@@ -1,6 +1,13 @@
 WHMCS Docker Image
 ==================
 
+> **End of life.** PHP 8.1 gets no official PHP release with the fix for
+> CVE-2026-109618 and CVE-2026-109619 (critical remote code execution, see the
+> [PHP security advisory](https://www.php.net/archive/2026.php#2026-10-21-5)).
+> This image installs the backported fix (`php8.1` 8.1.34-9 or newer) from
+> packages.sury.org on amd64 and from the ondrej/php Launchpad PPA on arm64.
+> Move to `version/8.x-php8.2` (`v8.13.7-v8.2`) or a 9.x branch.
+
 Ready to use Docker image for WHMCS environment, packaging PHP-FPM, nginx,
 SourceGuardian, and ionCube on top of `lscr.io/linuxserver/baseimage-ubuntu:noble`.
 
