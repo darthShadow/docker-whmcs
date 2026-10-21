@@ -151,8 +151,8 @@ server {
         rewrite ^/(?<rwpath>.*)$ /index.php?rp=auth/provider/google_signin/finalize$rwpath;
     }
 
-    location ~ /${WHMCS_ADMIN_PATH}/(?<adm_route>addons|apps|search|domains|help\/license|billing|logs|services|setup|user|utilities\/system\/php-compat)(?<adm_rest>.*) {
-        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/${rwpath}${adm_rest} last;
+    location ~ /${WHMCS_ADMIN_PATH}/(?:addons|apps|search|domains|help\/license|billing|logs|services|setup|user|utilities\/system\/php-compat)(?:.*) {
+        rewrite ^/(?<rwpath>.*)$ /${WHMCS_ADMIN_PATH}/index.php?rp=/${WHMCS_ADMIN_PATH}/${rwpath} last;
     }
 
     location ~ /${WHMCS_ADMIN_PATH}/client/?(?:.*)/paymethods/?(?:.*)$ {

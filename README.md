@@ -143,7 +143,7 @@ a 60-second start period.
 | `latest` | Build of `main` on every push and on every weekly run |
 | `latest-deps` | Alias for the most recent weekly dependency-update build |
 | `weekly-YYYY-MM-DD` | Specific weekly build (kept indefinitely) |
-| `v<whmcs>-v<php>` | Pinned WHMCS+PHP combination, e.g. `v9.0.4-v8.3`; weekly builds apply this tag directly |
+| `v<whmcs>-v<php>` | Pinned WHMCS+PHP combination, e.g. `v9.1.0-v8.3`; weekly builds apply this tag directly |
 
 Branch layout:
 
@@ -209,7 +209,16 @@ To upgrade WHMCS itself when a new image ships a newer version, choose one of:
 ### Major version / PHP upgrade
 
 Pin to the matching `version/<whmcs-major>.x-php<php>` branch tag, e.g.
-`ghcr.io/darthshadow/whmcs:v9.0.4-v8.3`, before crossing a major version.
+`ghcr.io/darthshadow/whmcs:v9.1.0-v8.3`, before crossing a major version.
+
+**WHMCS 9.1 must be installed before you move to PHP 8.4.** `latest` now runs
+PHP 8.4, but the image does not upgrade the WHMCS files already in
+`/config/www/whmcs`. If those files are older than 9.1:
+
+1. Switch to `ghcr.io/darthshadow/whmcs:v9.1.0-v8.3` (PHP 8.3, ionCube 15).
+2. Update WHMCS to 9.1 with Admin → Utilities → Update WHMCS.
+3. Check Utilities → System → PHP Version Compatibility for PHP 8.4.
+4. Switch to `latest` or `v9.1.0-v8.4`.
 
 ---
 
@@ -220,7 +229,7 @@ Pin to the matching `version/<whmcs-major>.x-php<php>` branch tag, e.g.
 scripts/build-local.sh image-local
 
 # Pin a specific WHMCS/PHP combo
-docker buildx bake --set image.args.WHMCS_RELEASE=9.0.4 \
+docker buildx bake --set image.args.WHMCS_RELEASE=9.1.0 \
                    --set image.args.PHP_RELEASE=8.3 image-local
 
 # Verify the loader downloads against known-good SHA256s (optional)
