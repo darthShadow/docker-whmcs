@@ -231,6 +231,20 @@ jobs:
             exit 1
           fi
 
+          docker exec "${container_name}" dpkg-query -W 'php*-fpm'
+
+          # Replace the admin front controller in the throwaway volume with a
+          # probe that echoes rp, so the admin route rewrite can be checked
+          # without a configured WHMCS install.
+          docker exec "${container_name}" sh -c \
+            "printf '%s' '<?php echo \$_GET[\"rp\"] ?? \"\";' > /config/www/whmcs/${WHMCS_ADMIN_PATH}/index.php"
+          rp=$(curl -s -u t:t "http://127.0.0.1:18080/${WHMCS_ADMIN_PATH}/addons/smoke-probe")
+          if [ "$(grep -o 'smoke-probe' <<< "${rp}" | wc -l)" -ne 1 ]; then
+            docker logs "${container_name}"
+            echo "::error::Expected the admin route rewrite to keep the path once, got rp=${rp}"
+            exit 1
+          fi
+
       - name: Upload Image Digest
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
